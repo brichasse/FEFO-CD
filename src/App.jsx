@@ -15,7 +15,6 @@ const ANALYSIS_TABS = [
   { id: 'snapshots', labelFn: (snaps) => `Snapshots (${snaps.length})` },
 ]
 
-// storage shape: { CD1500: [{date, rows}], CD1600: [...] }
 function loadStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -28,8 +27,8 @@ function saveStorage(data) {
 }
 
 export default function App() {
-  const [allData,   setAllData]   = useState({})   // { [cd]: [{date, rows}] }
-  const [activeCd,  setActiveCd]  = useState(null) // string | null
+  const [allData,   setAllData]   = useState({})
+  const [activeCd,  setActiveCd]  = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [tab,       setTab]       = useState('dashboard')
   const [busy,      setBusy]      = useState(false)
@@ -76,7 +75,22 @@ export default function App() {
         return
       }
 
-      const newSnaps = [...current, { date, rows }].sort((a, b) =>
+      // Construir mapa de fechaDeteccion desde snapshots anteriores
+      const prevFechas = {}
+      for (const snap of current) {
+        for (const r of snap.rows) {
+          const k = `${r.sku}||${r.dias}||${r.area}`
+          if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
+        }
+      }
+
+      // Asignar fechaDeteccion: si ya existía antes, heredar; si es nuevo, usar date actual
+      const rowsConFecha = rows.map(r => {
+        const k = `${r.sku}||${r.dias}||${r.area}`
+        return { ...r, fechaDeteccion: prevFechas[k] ?? date }
+      })
+
+      const newSnaps = [...current, { date, rows: rowsConFecha }].sort((a, b) =>
         a.date.split('/').reverse().join('').localeCompare(b.date.split('/').reverse().join(''))
       )
       const newData = { ...allData, [cd]: newSnaps }
@@ -108,7 +122,6 @@ export default function App() {
     showToast(`CD ${cd} eliminado.`)
   }
 
-  // Current CD data
   const snapshots = activeCd ? (allData[activeCd] || []) : []
   const latest    = snapshots[snapshots.length - 1]
   const prev      = snapshots[snapshots.length - 2]
@@ -132,12 +145,10 @@ export default function App() {
       {/* ── HEADER ── */}
       <header style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60, position: 'sticky', top: 0, zIndex: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* Logo */}
           <div style={{ background: '#0f172a', color: 'white', borderRadius: 8, padding: '5px 10px', fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 600, letterSpacing: 1 }}>
             FEFO
           </div>
 
-          {/* CD selector pill */}
           {cds.length === 0 ? (
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Panel FEFO</div>
