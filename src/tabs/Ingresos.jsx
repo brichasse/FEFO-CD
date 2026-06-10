@@ -3,9 +3,9 @@ import { RiskBadge, AreaPill, StatCard, TH, TD, EmptyState } from '../components
 export default function Ingresos({ diff, prev, latest }) {
   if (!diff) return <EmptyState icon="📊" text="Se necesitan al menos 2 snapshots." />
 
-  const criticos  = diff.nuevos.filter(r => r.dias < 60)
+  const criticos   = diff.nuevos.filter(r => r.dias < 60)
   const altoRiesgo = diff.nuevos.filter(r => r.dias >= 60 && r.dias < 90)
-  const mostrar   = diff.nuevos.filter(r => r.dias < 90).sort((a, b) => a.dias - b.dias)
+  const mostrar    = diff.nuevos.filter(r => r.dias < 90).sort((a, b) => a.dias - b.dias)
 
   return (
     <div>
@@ -30,6 +30,7 @@ export default function Ingresos({ diff, prev, latest }) {
               <tr>
                 <TH width="105px">SKU</TH>
                 <TH width="200px">Descripción</TH>
+                <TH width="90px">Detectado</TH>
                 <TH width="60px">Días</TH>
                 <TH width="75px">Cajas</TH>
                 <TH width="95px">Vence</TH>
@@ -42,6 +43,7 @@ export default function Ingresos({ diff, prev, latest }) {
                 <tr key={i} style={{ background: r.dias < 30 ? '#fef2f2' : r.dias < 60 ? '#fffbeb' : '#fefce8' }}>
                   <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.sku}</TD>
                   <TD>{r.desc}</TD>
+                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#0369a1', fontWeight: 600 }}>{latest?.date}</TD>
                   <TD style={{ fontWeight: 700, fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{r.dias}</TD>
                   <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
                   <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
