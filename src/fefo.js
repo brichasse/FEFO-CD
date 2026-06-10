@@ -20,7 +20,6 @@ export function parseCSV(text) {
 
     const col0 = p[0].replace(/"/g, '').trim()
 
-    // Detecta el CD desde la primera fila de datos (no el header)
     if (!cdDetectado && col0 && col0 !== 'Id. de almacen' && col0 !== 'Centro' && col0 !== 'centro') {
       cdDetectado = col0
     }
@@ -49,8 +48,10 @@ export function parseCSV(text) {
 export function aggregateRows(rows) {
   const map = {}
   for (const r of rows) {
-    const k = `${r.sku}||${r.dias}||${r.area}`
+    // Clave estable: sku + fecha de vencimiento + area (no usa dias porque cambia cada día)
+    const k = `${r.sku}||${r.fv}||${r.area}`
     if (!map[k]) map[k] = { ...r, cajas: 0 }
+    else map[k].dias = r.dias
     map[k].cajas += r.cajas
   }
   return Object.values(map)
@@ -58,8 +59,9 @@ export function aggregateRows(rows) {
 
 export function calcDiff(prev, curr) {
   const pm = {}, cm = {}
-  for (const r of prev) pm[`${r.sku}||${r.dias}||${r.area}`] = r
-  for (const r of curr) cm[`${r.sku}||${r.dias}||${r.area}`] = r
+  // Clave estable por sku+fv+area para detectar correctamente nuevos ingresos
+  for (const r of prev) pm[`${r.sku}||${r.fv}||${r.area}`] = r
+  for (const r of curr) cm[`${r.sku}||${r.fv}||${r.area}`] = r
   const pk = new Set(Object.keys(pm)), ck = new Set(Object.keys(cm))
 
   const salidos = [...pk].filter(k => !ck.has(k)).map(k => pm[k])
@@ -67,13 +69,13 @@ export function calcDiff(prev, curr) {
 
   const sklp = {}, sklc = {}
   for (const r of prev) {
-    const k = `${r.sku}||${r.dias}`
+    const k = `${r.sku}||${r.fv}`
     if (!sklp[k]) sklp[k] = { ...r, cajas: 0, areas: new Set() }
     sklp[k].cajas += r.cajas
     sklp[k].areas.add(r.area)
   }
   for (const r of curr) {
-    const k = `${r.sku}||${r.dias}`
+    const k = `${r.sku}||${r.fv}`
     if (!sklc[k]) sklc[k] = { ...r, cajas: 0, areas: new Set() }
     sklc[k].cajas += r.cajas
     sklc[k].areas.add(r.area)
@@ -89,16 +91,16 @@ export function calcDiff(prev, curr) {
     if (!bsc[sku]) continue
     const lotes1 = bsp[sku].sort((a, b) => a.dias - b.dias)
     const cm2 = {}
-    for (const l of bsc[sku]) cm2[l.dias] = l
+    for (const l of bsc[sku]) cm2[l.fv] = l
 
     if (lotes1.length < 2) {
-      const l = lotes1[0], l2 = cm2[l.dias]
+      const l = lotes1[0], l2 = cm2[l.fv]
       if (l2 && l2.cajas - l.cajas < -5) ok.push({ sku, desc: l.desc, areas: [...l.areas] })
       continue
     }
 
     const ant = lotes1[0], nvo = lotes1[1]
-    const a2 = cm2[ant.dias], n2 = cm2[nvo.dias]
+    const a2 = cm2[ant.fv], n2 = cm2[nvo.fv]
     const ca2 = a2 ? a2.cajas : ant.cajas
     const cn2 = n2 ? n2.cajas : nvo.cajas
     const da = ca2 - ant.cajas, dn = cn2 - nvo.cajas
