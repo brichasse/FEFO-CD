@@ -75,18 +75,16 @@ export default function App() {
         return
       }
 
-      // Construir mapa de fechaDeteccion desde snapshots anteriores
+      // Construir mapa de fechaDeteccion con clave estable sku+fv+area (dias cambia cada día)
       const prevFechas = {}
       for (const snap of current) {
         for (const r of snap.rows) {
-          const k = `${r.sku}||${r.dias}||${r.area}`
+          const k = `${r.sku}||${r.fv}||${r.area}`
           if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
         }
       }
-
-      // Asignar fechaDeteccion: si ya existía antes, heredar; si es nuevo, usar date actual
       const rowsConFecha = rows.map(r => {
-        const k = `${r.sku}||${r.dias}||${r.area}`
+        const k = `${r.sku}||${r.fv}||${r.area}`
         return { ...r, fechaDeteccion: prevFechas[k] ?? date }
       })
 
