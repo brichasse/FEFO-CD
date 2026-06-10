@@ -27,13 +27,14 @@ function saveStorage(data) {
 }
 
 export default function App() {
-  const [allData,   setAllData]   = useState({})
-  const [activeCd,  setActiveCd]  = useState(null)
-  const [loading,   setLoading]   = useState(true)
-  const [tab,       setTab]       = useState('dashboard')
-  const [busy,      setBusy]      = useState(false)
-  const [toast,     setToast]     = useState(null)
-  const [showCdSel, setShowCdSel] = useState(false)
+  const [allData,      setAllData]      = useState({})
+  const [activeCd,     setActiveCd]     = useState(null)
+  const [loading,      setLoading]      = useState(true)
+  const [tab,          setTab]          = useState('dashboard')
+  const [busy,         setBusy]         = useState(false)
+  const [toast,        setToast]        = useState(null)
+  const [showCdSel,    setShowCdSel]    = useState(false)
+  const [selectedDate, setSelectedDate] = useState(null) // snapshot seleccionado
 
   useEffect(() => {
     const data = loadStorage()
@@ -42,6 +43,11 @@ export default function App() {
     if (cds.length > 0) setActiveCd(cds[0])
     setLoading(false)
   }, [])
+
+  // Al cambiar de CD, resetear selectedDate para que apunte al último snapshot
+  useEffect(() => {
+    setSelectedDate(null)
+  }, [activeCd])
 
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok })
@@ -94,6 +100,7 @@ export default function App() {
       const newData = { ...allData, [cd]: newSnaps }
       save(newData)
       setActiveCd(cd)
+      setSelectedDate(date)
       setTab('dashboard')
       showToast(`✓ ${cd} · ${date} cargado — ${rows.length.toLocaleString()} registros`)
     } catch (e) {
@@ -109,6 +116,7 @@ export default function App() {
     if (newSnaps.length === 0) delete newData[activeCd]
     save(newData)
     if (!newData[activeCd]) setActiveCd(Object.keys(newData)[0] || null)
+    if (selectedDate === date) setSelectedDate(null)
     showToast(`Snapshot ${date} eliminado.`)
   }
 
@@ -120,9 +128,13 @@ export default function App() {
     showToast(`CD ${cd} eliminado.`)
   }
 
+  // Snapshot seleccionado (por defecto el último)
   const snapshots = activeCd ? (allData[activeCd] || []) : []
-  const latest    = snapshots[snapshots.length - 1]
-  const prev      = snapshots[snapshots.length - 2]
+  const latestIdx = selectedDate
+    ? snapshots.findIndex(s => s.date === selectedDate)
+    : snapshots.length - 1
+  const latest    = snapshots[latestIdx] ?? null
+  const prev      = latestIdx > 0 ? snapshots[latestIdx - 1] : null
   const diff      = prev && latest ? calcDiff(prev.rows, latest.rows) : null
   const incumples = diff ? diff.incumple.sort((a, b) => a.dias_ant - b.dias_ant) : null
   const cds       = Object.keys(allData)
@@ -172,7 +184,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {activeCd && latest && (
             <span style={{ fontSize: 11, color: '#94a3b8' }}>
-              {snapshots.length} snapshot{snapshots.length > 1 ? 's' : ''} · último: {latest.date}
+              {snapshots.length} snapshot{snapshots.length > 1 ? 's' : ''} · último: {snapshots[snapshots.length - 1]?.date}
             </span>
           )}
           <label style={{ cursor: busy ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, background: busy ? '#e2e8f0' : '#0f172a', color: busy ? '#64748b' : 'white', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 500, transition: 'background .15s' }}>
@@ -185,16 +197,61 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── ANALYSIS TABS ── */}
+      {/* ── SELECTOR DE SNAPSHOT + TABS ── */}
       {activeCd && (
-        <nav style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0 24px', display: 'flex', overflowX: 'auto' }}>
-          {ANALYSIS_TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: 'none', border: 'none', borderBottom: tab === t.id ? '2px solid #0f172a' : '2px solid transparent', padding: '12px 16px', fontSize: 12, fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? '#0f172a' : '#64748b', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color .1s' }}>
-              {tabLabel(t)}
-            </button>
-          ))}
-        </nav>
+        <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0' }}>
+
+          {/* Selector de día */}
+          {snapshots.length > 1 && (
+            <div style={{ padding: '8px 24px 0', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #f1f5f9' }}>
+              <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>Viendo:</span>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {snapshots.map((s, i) => {
+                  const isSelected = latest?.date === s.date
+                  const isLast = i === snapshots.length - 1
+                  return (
+                    <button key={s.date} onClick={() => setSelectedDate(s.date)}
+                      style={{
+                        background: isSelected ? '#0f172a' : '#f1f5f9',
+                        color: isSelected ? 'white' : '#475569',
+                        border: '1px solid ' + (isSelected ? '#0f172a' : '#e2e8f0'),
+                        borderRadius: 6,
+                        padding: '3px 10px',
+                        fontSize: 11,
+                        fontFamily: "'DM Mono', monospace",
+                        fontWeight: isSelected ? 600 : 400,
+                        cursor: 'pointer',
+                        transition: 'all .15s',
+                        position: 'relative',
+                      }}>
+                      {s.date}
+                      {isLast && (
+                        <span style={{ marginLeft: 5, fontSize: 9, background: isSelected ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: isSelected ? 'white' : '#94a3b8', borderRadius: 3, padding: '1px 4px' }}>
+                          último
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {prev && (
+                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4, flexShrink: 0 }}>
+                  vs {prev.date}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Tabs */}
+          <nav style={{ padding: '0 24px', display: 'flex', overflowX: 'auto' }}>
+            {ANALYSIS_TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                style={{ background: 'none', border: 'none', borderBottom: tab === t.id ? '2px solid #0f172a' : '2px solid transparent', padding: '12px 16px', fontSize: 12, fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? '#0f172a' : '#64748b', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color .1s' }}>
+                {tabLabel(t)}
+              </button>
+            ))}
+          </nav>
+        </div>
       )}
 
       {/* ── CONTENT ── */}
