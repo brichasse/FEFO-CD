@@ -43,7 +43,7 @@ export default function Ingresos({ diff, prev, latest }) {
                 <tr key={i} style={{ background: r.dias < 30 ? '#fef2f2' : r.dias < 60 ? '#fffbeb' : '#fefce8' }}>
                   <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.sku}</TD>
                   <TD>{r.desc}</TD>
-                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#0369a1', fontWeight: 600 }}>{latest?.date}</TD>
+                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#0369a1', fontWeight: 600 }}>{r.fechaDeteccion ?? latest?.date}</TD>
                   <TD style={{ fontWeight: 700, fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{r.dias}</TD>
                   <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
                   <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
