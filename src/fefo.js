@@ -59,13 +59,18 @@ export function aggregateRows(rows) {
 
 export function calcDiff(prev, curr) {
   const pm = {}, cm = {}
-  // Clave estable por sku+fv+area para detectar correctamente nuevos ingresos
   for (const r of prev) pm[`${r.sku}||${r.fv}||${r.area}`] = r
   for (const r of curr) cm[`${r.sku}||${r.fv}||${r.area}`] = r
   const pk = new Set(Object.keys(pm)), ck = new Set(Object.keys(cm))
 
   const salidos = [...pk].filter(k => !ck.has(k)).map(k => pm[k])
-  const nuevos  = [...ck].filter(k => !pk.has(k)).map(k => cm[k])
+
+  // Para nuevos ingresos usar solo sku+fv (sin área) para ignorar movimientos internos
+  const pkSinArea = new Set(prev.map(r => `${r.sku}||${r.fv}`))
+  const nuevos = curr
+    .filter(r => !pkSinArea.has(`${r.sku}||${r.fv}`))
+    // deduplicar por sku+fv en caso de que el mismo lote esté en varias áreas nuevas
+    .filter((r, i, arr) => arr.findIndex(x => x.sku === r.sku && x.fv === r.fv) === i)
 
   const sklp = {}, sklc = {}
   for (const r of prev) {
