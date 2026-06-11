@@ -34,7 +34,7 @@ export default function App() {
   const [busy,         setBusy]         = useState(false)
   const [toast,        setToast]        = useState(null)
   const [showCdSel,    setShowCdSel]    = useState(false)
-  const [selectedDate, setSelectedDate] = useState(null) // snapshot seleccionado
+  const [selectedDate, setSelectedDate] = useState(null)
 
   useEffect(() => {
     const data = loadStorage()
@@ -44,7 +44,7 @@ export default function App() {
     setLoading(false)
   }, [])
 
-  // Al cambiar de CD, resetear selectedDate para que apunte al último snapshot
+  // Al cambiar de CD, resetear selectedDate para apuntar al último snapshot
   useEffect(() => {
     setSelectedDate(null)
   }, [activeCd])
@@ -81,16 +81,16 @@ export default function App() {
         return
       }
 
-      // Construir mapa de fechaDeteccion con clave estable sku+fv+area (dias cambia cada día)
+      // Clave sku+fv (sin área) para ignorar movimientos internos entre ubicaciones
       const prevFechas = {}
       for (const snap of current) {
         for (const r of snap.rows) {
-          const k = `${r.sku}||${r.fv}||${r.area}`
+          const k = `${r.sku}||${r.fv}`
           if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
         }
       }
       const rowsConFecha = rows.map(r => {
-        const k = `${r.sku}||${r.fv}||${r.area}`
+        const k = `${r.sku}||${r.fv}`
         return { ...r, fechaDeteccion: prevFechas[k] ?? date }
       })
 
@@ -129,15 +129,15 @@ export default function App() {
   }
 
   // Snapshot seleccionado (por defecto el último)
-  const snapshots = activeCd ? (allData[activeCd] || []) : []
-  const latestIdx = selectedDate
+  const snapshots  = activeCd ? (allData[activeCd] || []) : []
+  const latestIdx  = selectedDate
     ? snapshots.findIndex(s => s.date === selectedDate)
     : snapshots.length - 1
-  const latest    = snapshots[latestIdx] ?? null
-  const prev      = latestIdx > 0 ? snapshots[latestIdx - 1] : null
-  const diff      = prev && latest ? calcDiff(prev.rows, latest.rows) : null
-  const incumples = diff ? diff.incumple.sort((a, b) => a.dias_ant - b.dias_ant) : null
-  const cds       = Object.keys(allData)
+  const latest     = snapshots[latestIdx] ?? null
+  const prev       = latestIdx > 0 ? snapshots[latestIdx - 1] : null
+  const diff       = prev && latest ? calcDiff(prev.rows, latest.rows) : null
+  const incumples  = diff ? diff.incumple.sort((a, b) => a.dias_ant - b.dias_ant) : null
+  const cds        = Object.keys(allData)
 
   const tabLabel = (t) => t.labelFn ? t.labelFn(snapshots, incumples, diff) : t.label
 
@@ -222,7 +222,6 @@ export default function App() {
                         fontWeight: isSelected ? 600 : 400,
                         cursor: 'pointer',
                         transition: 'all .15s',
-                        position: 'relative',
                       }}>
                       {s.date}
                       {isLast && (
@@ -267,7 +266,7 @@ export default function App() {
             {tab === 'dashboard' && <Dashboard snapshots={snapshots} latest={latest} prev={prev} diff={diff} incumples={incumples ?? []} cdName={activeCd} />}
             {tab === 'criticos'  && <Criticos  latest={latest} />}
             {tab === 'fefo'      && <FEFOTab   diff={diff} prev={prev} latest={latest} />}
-            {tab === 'ingresos'  && <Ingresos  diff={diff} prev={prev} latest={latest} />}
+            {tab === 'ingresos'  && <Ingresos  diff={diff} prev={prev} latest={latest} snapshots={snapshots} />}
             {tab === 'snapshots' && <Snapshots snapshots={snapshots} onDelete={onDelete} />}
           </>
         )}
