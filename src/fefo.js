@@ -11,6 +11,7 @@ export function classify(dias) {
 export function parseCSV(text) {
   const rows = []
   let cdDetectado = null
+  let ultimoCd = null
 
   for (const line of text.replace(/\r/g, '').split('\n')) {
     const t = line.trim()
@@ -20,9 +21,14 @@ export function parseCSV(text) {
 
     const col0 = p[0].replace(/"/g, '').trim()
 
-    if (!cdDetectado && col0 && col0 !== 'Id. de almacen' && col0 !== 'Centro' && col0 !== 'centro') {
-      cdDetectado = col0
+    if (col0 && col0 !== 'Id. de almacen' && col0 !== 'Centro' && col0 !== 'centro') {
+      if (!cdDetectado) cdDetectado = col0
+      ultimoCd = col0
     }
+
+    // Heredar CD cuando la celda viene vacía o mal formateada
+    const cdFila = col0 || ultimoCd
+    if (!cdFila) continue
 
     const area = p[1].replace(/["\n]/g, '').trim()
     if (EXCLUDE_AREAS.some(x => area.toUpperCase().includes(x))) continue
@@ -32,7 +38,7 @@ export function parseCSV(text) {
     if (!p[2] || isNaN(dias) || isNaN(cajas) || dias < 0) continue
 
     rows.push({
-      cd:   col0,
+      cd:   cdFila,
       sku:  p[2].trim(),
       desc: p[3].trim(),
       area,
@@ -48,7 +54,6 @@ export function parseCSV(text) {
 export function aggregateRows(rows) {
   const map = {}
   for (const r of rows) {
-    // Clave estable: sku + fecha de vencimiento + area (no usa dias porque cambia cada día)
     const k = `${r.sku}||${r.fv}||${r.area}`
     if (!map[k]) map[k] = { ...r, cajas: 0 }
     else map[k].dias = r.dias
@@ -65,11 +70,10 @@ export function calcDiff(prev, curr) {
 
   const salidos = [...pk].filter(k => !ck.has(k)).map(k => pm[k])
 
-  // Para nuevos ingresos usar solo sku+fv (sin área) para ignorar movimientos internos
+  // Clave sin área para ignorar movimientos internos
   const pkSinArea = new Set(prev.map(r => `${r.sku}||${r.fv}`))
   const nuevos = curr
     .filter(r => !pkSinArea.has(`${r.sku}||${r.fv}`))
-    // deduplicar por sku+fv en caso de que el mismo lote esté en varias áreas nuevas
     .filter((r, i, arr) => arr.findIndex(x => x.sku === r.sku && x.fv === r.fv) === i)
 
   const sklp = {}, sklc = {}
