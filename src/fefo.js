@@ -1,4 +1,4 @@
-export const EXCLUDE_AREAS = ['STAGE DESPACHO', 'STAGE RECEPCION']
+export const EXCLUDE_AREAS = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
 export const STORAGE_KEY = 'fefo_snapshots_v5'
 
 export function classify(dias) {
