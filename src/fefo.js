@@ -13,7 +13,17 @@ export function parseCSV(text) {
   let cdDetectado = null
   let ultimoCd = null
 
+  // Unir líneas partidas por saltos de línea dentro de celdas entrecomilladas
+  const lineas = []
   for (const line of text.replace(/\r/g, '').split('\n')) {
+    if (lineas.length > 0 && lineas[lineas.length - 1].split(';').length < 9) {
+      lineas[lineas.length - 1] += line
+    } else {
+      lineas.push(line)
+    }
+  }
+
+  for (const line of lineas) {
     const t = line.trim()
     if (!t) continue
     const p = t.split(';')
@@ -26,11 +36,11 @@ export function parseCSV(text) {
       ultimoCd = col0
     }
 
-    // Heredar CD cuando la celda viene vacía o mal formateada
     const cdFila = col0 || ultimoCd
     if (!cdFila) continue
 
     const area = p[1].replace(/["\n]/g, '').trim()
+    if (!area) continue
     if (EXCLUDE_AREAS.some(x => area.toUpperCase().includes(x))) continue
 
     const dias = parseInt(p[7])
