@@ -1,12 +1,22 @@
-export const EXCLUDE_AREAS = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
-export const AREAS_ALMACENAMIENTO = ['ALMACENAMIENTO M', 'AREA ALMACENAMIENTO PE']
 export const STORAGE_KEY = 'fefo_snapshots_v5'
 
+// Patrones para clasificar áreas — funciona para todos los CDs
+const PATRONES_EXCLUIR      = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
+const PATRONES_ALMACENAMIENTO = ['ALMACENAMIENTO', 'VNA', 'CARPA', 'MIXTOS']
+
+const esExcluida      = (area) => PATRONES_EXCLUIR.some(p => area.toUpperCase().includes(p))
+const esAlmacenamiento = (area) => PATRONES_ALMACENAMIENTO.some(p => area.toUpperCase().includes(p))
+const esPicking        = (area) => !esAlmacenamiento(area) && !esExcluida(area)
+
+const tieneAlmacen  = (areas) => [...areas].some(a => esAlmacenamiento(a))
+const soloPicking   = (areas) => [...areas].every(a => esPicking(a))
+const tienePicking  = (areas) => [...areas].some(a => esPicking(a))
+
 export function classify(dias) {
-  if (dias < 60)  return { label: 'Crítico',    color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
-  if (dias < 90)  return { label: 'Alto Riesgo',color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
-  if (dias <= 180)return { label: 'Medio',       color: '#ca8a04', bg: '#fefce8', border: '#fde047' }
-  return           { label: 'Bajo',              color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
+  if (dias < 60)  return { label: 'Crítico',     color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
+  if (dias < 90)  return { label: 'Alto Riesgo', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
+  if (dias <= 180)return { label: 'Medio',        color: '#ca8a04', bg: '#fefce8', border: '#fde047' }
+  return           { label: 'Bajo',               color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
 }
 
 export function parseCSV(text) {
@@ -41,7 +51,7 @@ export function parseCSV(text) {
 
     const area = p[1].replace(/["\n]/g, '').trim()
     if (!area) continue
-    if (EXCLUDE_AREAS.some(x => area.toUpperCase().includes(x))) continue
+    if (esExcluida(area)) continue
 
     const dias = parseInt(p[7])
     const cajas = parseInt(p[8])
@@ -71,9 +81,6 @@ export function aggregateRows(rows) {
   }
   return Object.values(map)
 }
-
-const enAlmacen = (areas) => [...areas].some(a => AREAS_ALMACENAMIENTO.includes(a))
-const soloEnPicking = (areas) => [...areas].every(a => !AREAS_ALMACENAMIENTO.includes(a))
 
 export function calcDiff(prev, curr) {
   const pm = {}, cm = {}
@@ -133,26 +140,24 @@ export function calcDiff(prev, curr) {
       riesgo.push({ sku, desc: ant.desc, nota: 'Consumo simultáneo', areas: aa })
     } else if (da >= -5 && ant.cajas > 20) {
       if (dn < -5) {
-        // Hay consumo del lote nuevo, clasificar según áreas
-        const antSoloPicking = soloEnPicking(ant.areas)
-        const antEnAlmacen   = enAlmacen(ant.areas)
-        const nvoEnAlmacen   = enAlmacen(nvo.areas)
-        const nvoEnPicking   = soloEnPicking(nvo.areas)
+        const antSoloPicking  = soloPicking(ant.areas)
+        const antTieneAlmacen = tieneAlmacen(ant.areas)
+        const nvoTieneAlmacen = tieneAlmacen(nvo.areas)
+        const nvoTienePicking = tienePicking(nvo.areas)
 
-        if (antSoloPicking && nvoEnAlmacen) {
-          // Antiguo solo en picking, consumo de almacén → OK, no es incumplimiento
-        } else if (antEnAlmacen && nvoEnAlmacen) {
+        if (antSoloPicking && nvoTieneAlmacen) {
+          // Antiguo solo en picking, consumo de almacén → OK
+        } else if (antTieneAlmacen && nvoTieneAlmacen) {
           // Ambos en almacén → incumplimiento real
           incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
-        } else if (antEnAlmacen && nvoEnPicking) {
+        } else if (antTieneAlmacen && !nvoTieneAlmacen && nvoTienePicking) {
           // Antiguo en almacén, consumo de picking → alerta abastecimiento
           abastecimiento.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
-        } else if (antSoloPicking && nvoEnPicking) {
+        } else if (antSoloPicking && nvoTienePicking) {
           // Ambos en picking → incumplimiento
           incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         }
       } else if (ant.dias < 90) {
-        // Sin consumo del nuevo pero lote antiguo crítico sin movimiento
         riesgo.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, nota: 'Crítico sin movimiento', areas: aa })
       }
     }
