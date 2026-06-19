@@ -1,4 +1,5 @@
 export const EXCLUDE_AREAS = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
+export const AREAS_ALMACENAMIENTO = ['ALMACENAMIENTO M', 'AREA ALMACENAMIENTO PE']
 export const STORAGE_KEY = 'fefo_snapshots_v5'
 
 export function classify(dias) {
@@ -13,7 +14,6 @@ export function parseCSV(text) {
   let cdDetectado = null
   let ultimoCd = null
 
-  // Unir líneas partidas por saltos de línea dentro de celdas entrecomilladas
   const lineas = []
   for (const line of text.replace(/\r/g, '').split('\n')) {
     if (lineas.length > 0 && lineas[lineas.length - 1].split(';').length < 9) {
@@ -72,6 +72,9 @@ export function aggregateRows(rows) {
   return Object.values(map)
 }
 
+const enAlmacen = (areas) => [...areas].some(a => AREAS_ALMACENAMIENTO.includes(a))
+const soloEnPicking = (areas) => [...areas].every(a => !AREAS_ALMACENAMIENTO.includes(a))
+
 export function calcDiff(prev, curr) {
   const pm = {}, cm = {}
   for (const r of prev) pm[`${r.sku}||${r.fv}||${r.area}`] = r
@@ -80,7 +83,6 @@ export function calcDiff(prev, curr) {
 
   const salidos = [...pk].filter(k => !ck.has(k)).map(k => pm[k])
 
-  // Clave sin área para ignorar movimientos internos
   const pkSinArea = new Set(prev.map(r => `${r.sku}||${r.fv}`))
   const nuevos = curr
     .filter(r => !pkSinArea.has(`${r.sku}||${r.fv}`))
@@ -104,7 +106,7 @@ export function calcDiff(prev, curr) {
   for (const v of Object.values(sklp)) { if (!bsp[v.sku]) bsp[v.sku] = []; bsp[v.sku].push(v) }
   for (const v of Object.values(sklc)) { if (!bsc[v.sku]) bsc[v.sku] = []; bsc[v.sku].push(v) }
 
-  const ok = [], riesgo = [], incumple = []
+  const ok = [], riesgo = [], incumple = [], abastecimiento = []
 
   for (const sku of Object.keys(bsp)) {
     if (!bsc[sku]) continue
@@ -125,15 +127,36 @@ export function calcDiff(prev, curr) {
     const da = ca2 - ant.cajas, dn = cn2 - nvo.cajas
     const aa = [...ant.areas], na = [...nvo.areas]
 
-    if (da < -5 && dn >= -5)
+    if (da < -5 && dn >= -5) {
       ok.push({ sku, desc: ant.desc, dias: ant.dias, delta: da, areas: aa })
-    else if (da >= -5 && dn < -5 && ant.cajas > 20)
-      incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
-    else if (da < -5 && dn < -5)
+    } else if (da < -5 && dn < -5) {
       riesgo.push({ sku, desc: ant.desc, nota: 'Consumo simultáneo', areas: aa })
-    else if (da >= -5 && ant.dias < 90 && ant.cajas > 20)
-      riesgo.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, nota: 'Crítico sin movimiento', areas: aa })
+    } else if (da >= -5 && ant.cajas > 20) {
+      if (dn < -5) {
+        // Hay consumo del lote nuevo, clasificar según áreas
+        const antSoloPicking = soloEnPicking(ant.areas)
+        const antEnAlmacen   = enAlmacen(ant.areas)
+        const nvoEnAlmacen   = enAlmacen(nvo.areas)
+        const nvoEnPicking   = soloEnPicking(nvo.areas)
+
+        if (antSoloPicking && nvoEnAlmacen) {
+          // Antiguo solo en picking, consumo de almacén → OK, no es incumplimiento
+        } else if (antEnAlmacen && nvoEnAlmacen) {
+          // Ambos en almacén → incumplimiento real
+          incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
+        } else if (antEnAlmacen && nvoEnPicking) {
+          // Antiguo en almacén, consumo de picking → alerta abastecimiento
+          abastecimiento.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
+        } else if (antSoloPicking && nvoEnPicking) {
+          // Ambos en picking → incumplimiento
+          incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
+        }
+      } else if (ant.dias < 90) {
+        // Sin consumo del nuevo pero lote antiguo crítico sin movimiento
+        riesgo.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, nota: 'Crítico sin movimiento', areas: aa })
+      }
+    }
   }
 
-  return { salidos, nuevos, ok, riesgo, incumple }
+  return { salidos, nuevos, ok, riesgo, incumple, abastecimiento }
 }
