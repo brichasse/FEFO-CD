@@ -1,17 +1,32 @@
 export const STORAGE_KEY = 'fefo_snapshots_v5'
 
-// Patrones para clasificar áreas — funciona para todos los CDs
-const PATRONES_EXCLUIR      = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
+const PATRONES_EXCLUIR        = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
 const PATRONES_ALMACENAMIENTO = ['ALMACENAMIENTO', 'VNA', 'CARPA', 'MIXTOS']
 
-const esExcluida      = (area) => PATRONES_EXCLUIR.some(p => area.toUpperCase().includes(p))
+const esExcluida       = (area) => PATRONES_EXCLUIR.some(p => area.toUpperCase().includes(p))
 const esAlmacenamiento = (area) => PATRONES_ALMACENAMIENTO.some(p => area.toUpperCase().includes(p))
 const esPicking        = (area) => !esAlmacenamiento(area) && !esExcluida(area)
 
-const tieneAlmacen  = (areas) => [...areas].some(a => esAlmacenamiento(a))
-const soloPicking   = (areas) => [...areas].every(a => esPicking(a))
-const tienePicking  = (areas) => [...areas].some(a => esPicking(a))
+const tieneAlmacen = (areas) => [...areas].some(a => esAlmacenamiento(a))
+const soloPicking  = (areas) => [...areas].every(a => esPicking(a))
+const tienePicking = (areas) => [...areas].some(a => esPicking(a))
 
+// Porcentaje de vida útil disponible
+export function pctVida(r) {
+  if (!r.vidaUtil || r.vidaUtil <= 0) return null
+  return r.dias / r.vidaUtil * 100
+}
+
+// Clasificación por % de vida útil
+export function classifyPct(pct) {
+  if (pct == null)  return { label: 'Sin dato', nivel: 0, color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }
+  if (pct < 30)     return { label: 'Urgente',  nivel: 4, color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
+  if (pct < 50)     return { label: 'Crítico',  nivel: 3, color: '#ef4444', bg: '#fef2f2', border: '#fecaca' }
+  if (pct <= 55)    return { label: 'Alerta',   nivel: 2, color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
+  return              { label: 'Sano',     nivel: 1, color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
+}
+
+// Compatibilidad: classify por días (aún usado en algunos lugares)
 export function classify(dias) {
   if (dias < 60)  return { label: 'Crítico',     color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
   if (dias < 90)  return { label: 'Alto Riesgo', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
@@ -53,6 +68,7 @@ export function parseCSV(text) {
     if (!area) continue
     if (esExcluida(area)) continue
 
+    const vidaUtil = parseInt(p[5])
     const dias = parseInt(p[7])
     const cajas = parseInt(p[8])
     if (!p[2] || isNaN(dias) || isNaN(cajas) || dias < 0) continue
@@ -62,6 +78,7 @@ export function parseCSV(text) {
       sku:  p[2].trim(),
       desc: p[3].trim(),
       area,
+      vidaUtil: isNaN(vidaUtil) ? null : vidaUtil,
       dias,
       cajas,
       fv:   p[6].trim().slice(0, 10),
@@ -146,15 +163,12 @@ export function calcDiff(prev, curr) {
         const nvoTienePicking = tienePicking(nvo.areas)
 
         if (antSoloPicking && nvoTieneAlmacen) {
-          // Antiguo solo en picking, consumo de almacén → OK
+          // OK
         } else if (antTieneAlmacen && nvoTieneAlmacen) {
-          // Ambos en almacén → incumplimiento real
           incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         } else if (antTieneAlmacen && !nvoTieneAlmacen && nvoTienePicking) {
-          // Antiguo en almacén, consumo de picking → alerta abastecimiento
           abastecimiento.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         } else if (antSoloPicking && nvoTienePicking) {
-          // Ambos en picking → incumplimiento
           incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         }
       } else if (ant.dias < 90) {
