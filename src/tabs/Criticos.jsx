@@ -1,28 +1,35 @@
 import { useState } from 'react'
-import { RiskBadge, AreaPill, TH, TD, EmptyState } from '../components.jsx'
+import { pctVida } from '../fefo.js'
+import { VidaBadge, AreaPill, TH, TD, EmptyState } from '../components.jsx'
 
 export default function Criticos({ latest }) {
   const [busqueda, setBusqueda] = useState('')
 
-  const agg = latest ? latest.rows : []
-  const crit = [...agg].filter(r => r.dias < 60).sort((a, b) => a.dias - b.dias || b.cajas - a.cajas)
+  if (!latest) return <EmptyState icon="📦" text="Sube el primer CSV para ver el inventario." />
 
-  if (!latest) return <EmptyState icon="📦" text="Sube el primer CSV para ver lotes críticos." />
-  if (crit.length === 0) return <EmptyState icon="✅" text="Sin lotes críticos en este snapshot." />
+  const agg = latest.rows
+
+  // Ordenar todo el inventario de menor a mayor % de vida útil
+  const ordenado = [...agg].sort((a, b) => {
+    const pa = pctVida(a), pb = pctVida(b)
+    if (pa == null) return 1
+    if (pb == null) return -1
+    return pa - pb
+  })
 
   const filtrados = busqueda.trim()
-    ? crit.filter(r =>
+    ? ordenado.filter(r =>
         r.sku.toLowerCase().includes(busqueda.toLowerCase()) ||
         r.desc.toLowerCase().includes(busqueda.toLowerCase())
       )
-    : crit
+    : ordenado
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
         <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
-          Lotes con menos de 60 días de vida útil · snapshot {latest.date} · {filtrados.length}
-          {busqueda.trim() ? ` de ${crit.length}` : ''} registros
+          Inventario completo ordenado por vida útil · snapshot {latest.date} · {filtrados.length}
+          {busqueda.trim() ? ` de ${ordenado.length}` : ''} registros
         </p>
         <div style={{ position: 'relative' }}>
           <input
@@ -50,26 +57,38 @@ export default function Criticos({ latest }) {
             <thead>
               <tr>
                 <TH width="105px">SKU</TH>
-                <TH width="200px">Descripción</TH>
+                <TH width="190px">Descripción</TH>
                 <TH width="60px">Días</TH>
-                <TH width="75px">Cajas</TH>
-                <TH width="95px">Vence</TH>
-                <TH width="200px">Área</TH>
-                <TH width="95px">Riesgo</TH>
+                <TH width="70px">Vida útil</TH>
+                <TH width="60px">% Vida</TH>
+                <TH width="70px">Cajas</TH>
+                <TH width="90px">Vence</TH>
+                <TH width="180px">Área</TH>
+                <TH width="110px">Estado</TH>
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((r, i) => (
-                <tr key={i} style={{ background: r.dias < 15 ? '#fef2f2' : r.dias < 30 ? '#fffbeb' : 'white' }}>
-                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.sku}</TD>
-                  <TD>{r.desc}</TD>
-                  <TD style={{ fontWeight: 700, fontFamily: "'DM Mono', monospace", color: r.dias < 15 ? '#dc2626' : '#d97706' }}>{r.dias}</TD>
-                  <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
-                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
-                  <TD><AreaPill area={r.area} /></TD>
-                  <TD><RiskBadge dias={r.dias} /></TD>
-                </tr>
-              ))}
+              {filtrados.map((r, i) => {
+                const pct = pctVida(r)
+                const bg = pct == null ? 'white'
+                  : pct < 30 ? '#fef2f2'
+                  : pct < 50 ? '#fff5f5'
+                  : pct <= 55 ? '#fffbeb'
+                  : 'white'
+                return (
+                  <tr key={i} style={{ background: bg }}>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.sku}</TD>
+                    <TD>{r.desc}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", color: '#64748b' }}>{r.dias}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", color: '#94a3b8' }}>{r.vidaUtil ?? '—'}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color: '#0f172a' }}>{pct != null ? `${Math.round(pct)}%` : '—'}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
+                    <TD><AreaPill area={r.area} /></TD>
+                    <TD><VidaBadge pct={pct} /></TD>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
