@@ -9,7 +9,7 @@ import CDSelector from './tabs/CDSelector.jsx'
 
 const ANALYSIS_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'criticos',  labelFn: (snaps) => `Críticos (${snaps[snaps.length-1]?.rows.filter(r=>r.dias<60).length ?? 0})` },
+  { id: 'criticos',  labelFn: (snaps) => `Vida Útil (${snaps[snaps.length-1]?.rows.filter(r=>r.dias<60).length ?? 0})` },
   { id: 'fefo',      labelFn: (_, inc) => `FEFO${inc ? ` — ${inc.length} ❌` : ''}` },
   { id: 'ingresos',  labelFn: (_, __, diff) => `Ingresos${diff ? ` (${diff.nuevos.filter(r=>r.dias<90).length})` : ''}` },
   { id: 'snapshots', labelFn: (snaps) => `Snapshots (${snaps.length})` },
