@@ -3,6 +3,9 @@ export const STORAGE_KEY = 'fefo_snapshots_v5'
 const PATRONES_EXCLUIR        = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
 const PATRONES_ALMACENAMIENTO = ['ALMACENAMIENTO', 'VNA', 'CARPA', 'MIXTOS']
 
+// Perfiles de antigüedad que no generan alerta de vida útil
+const PERFILES_SIN_CONTROL = [600, 999, 1100, 9999]
+
 const esExcluida       = (area) => PATRONES_EXCLUIR.some(p => area.toUpperCase().includes(p))
 const esAlmacenamiento = (area) => PATRONES_ALMACENAMIENTO.some(p => area.toUpperCase().includes(p))
 const esPicking        = (area) => !esAlmacenamiento(area) && !esExcluida(area)
@@ -18,7 +21,10 @@ export function pctVida(r) {
 }
 
 // Clasificación por % de vida útil
-export function classifyPct(pct) {
+export function classifyPct(pct, vidaUtil) {
+  // Productos sin control de vencimiento → nunca generan alerta
+  if (vidaUtil != null && PERFILES_SIN_CONTROL.includes(vidaUtil))
+    return { label: 'Sin control', nivel: 1, color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
   if (pct == null)  return { label: 'Sin dato', nivel: 0, color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }
   if (pct < 30)     return { label: 'Urgente',  nivel: 4, color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
   if (pct < 50)     return { label: 'Crítico',  nivel: 3, color: '#ef4444', bg: '#fef2f2', border: '#fecaca' }
@@ -26,7 +32,7 @@ export function classifyPct(pct) {
   return              { label: 'Sano',     nivel: 1, color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
 }
 
-// Compatibilidad: classify por días (aún usado en algunos lugares)
+// Compatibilidad: classify por días
 export function classify(dias) {
   if (dias < 60)  return { label: 'Crítico',     color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
   if (dias < 90)  return { label: 'Alto Riesgo', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
