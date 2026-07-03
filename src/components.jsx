@@ -1,6 +1,5 @@
 import { classify, classifyPct } from './fefo.js'
 
-// Badge antiguo por días (compatibilidad)
 export function RiskBadge({ dias }) {
   const c = classify(dias)
   return (
@@ -10,12 +9,12 @@ export function RiskBadge({ dias }) {
   )
 }
 
-// Badge nuevo por % de vida útil
-export function VidaBadge({ pct }) {
-  const c = classifyPct(pct)
+export function VidaBadge({ pct, vidaUtil }) {
+  const c = classifyPct(pct, vidaUtil)
+  const mostrarPct = pct != null && !c.label.includes('control')
   return (
     <span style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}`, borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-      {c.label}{pct != null ? ` · ${Math.round(pct)}%` : ''}
+      {c.label}{mostrarPct ? ` · ${Math.round(pct)}%` : ''}
     </span>
   )
 }
