@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { pctVida } from '../fefo.js'
+import { pctVida, classifyPct } from '../fefo.js'
 import { VidaBadge, AreaPill, TH, TD, EmptyState } from '../components.jsx'
 
 export default function Criticos({ latest }) {
@@ -9,7 +9,6 @@ export default function Criticos({ latest }) {
 
   const agg = latest.rows
 
-  // Ordenar todo el inventario de menor a mayor % de vida útil
   const ordenado = [...agg].sort((a, b) => {
     const pa = pctVida(a), pb = pctVida(b)
     if (pa == null) return 1
@@ -70,10 +69,10 @@ export default function Criticos({ latest }) {
             <tbody>
               {filtrados.map((r, i) => {
                 const pct = pctVida(r)
-                const bg = pct == null ? 'white'
-                  : pct < 30 ? '#fef2f2'
-                  : pct < 50 ? '#fff5f5'
-                  : pct <= 55 ? '#fffbeb'
+                const c = classifyPct(pct, r.vidaUtil)
+                const bg = c.nivel >= 4 ? '#fef2f2'
+                  : c.nivel === 3 ? '#fff5f5'
+                  : c.nivel === 2 ? '#fffbeb'
                   : 'white'
                 return (
                   <tr key={i} style={{ background: bg }}>
@@ -85,7 +84,7 @@ export default function Criticos({ latest }) {
                     <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
                     <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
                     <TD><AreaPill area={r.area} /></TD>
-                    <TD><VidaBadge pct={pct} /></TD>
+                    <TD><VidaBadge pct={pct} vidaUtil={r.vidaUtil} /></TD>
                   </tr>
                 )
               })}
