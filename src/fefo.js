@@ -68,6 +68,7 @@ export function parseCSV(text) {
     if (!area) continue
     if (esExcluida(area)) continue
 
+    const estado = (p[4] || '').replace(/["\n]/g, '').trim() || 'Sin estado'
     const vidaUtil = parseInt(p[5])
     const dias = parseInt(p[7])
     const cajas = parseInt(p[8])
@@ -78,6 +79,7 @@ export function parseCSV(text) {
       sku:  p[2].trim(),
       desc: p[3].trim(),
       area,
+      estado,
       vidaUtil: isNaN(vidaUtil) ? null : vidaUtil,
       dias,
       cajas,
@@ -91,7 +93,7 @@ export function parseCSV(text) {
 export function aggregateRows(rows) {
   const map = {}
   for (const r of rows) {
-    const k = `${r.sku}||${r.fv}||${r.area}`
+    const k = `${r.sku}||${r.fv}||${r.area}||${r.estado}`
     if (!map[k]) map[k] = { ...r, cajas: 0 }
     else map[k].dias = r.dias
     map[k].cajas += r.cajas
