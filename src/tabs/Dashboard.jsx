@@ -5,19 +5,20 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
   const agg = latest ? latest.rows : []
   const tot = agg.reduce((s, r) => s + r.cajas, 0)
 
-  // Distribución por nivel de vida útil
-  const niveles = ['Urgente', 'Crítico', 'Alerta', 'Sano', 'Sin dato']
+  const niveles = ['Urgente', 'Crítico', 'Alerta', 'Sano', 'Sin control', 'Sin dato']
   const rg = Object.fromEntries(niveles.map(n => [n, 0]))
   const rc = Object.fromEntries(niveles.map(n => [n, 0]))
   for (const r of agg) {
-    const c = classifyPct(pctVida(r))
-    rg[c.label]++
-    rc[c.label] += r.cajas
+    const c = classifyPct(pctVida(r), r.vidaUtil)
+    rg[c.label] = (rg[c.label] ?? 0) + 1
+    rc[c.label] = (rc[c.label] ?? 0) + r.cajas
   }
 
-  // Lotes urgentes + críticos para alertas
   const criticos = [...agg]
-    .filter(r => { const p = pctVida(r); return p != null && p < 50 })
+    .filter(r => {
+      const c = classifyPct(pctVida(r), r.vidaUtil)
+      return c.nivel >= 3
+    })
     .sort((a, b) => (pctVida(a) ?? 999) - (pctVida(b) ?? 999))
 
   const netaDelta = diff
@@ -43,7 +44,6 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
 
   return (
     <div>
-      {/* KPI grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
         <StatCard label="Total cajas"  value={tot.toLocaleString('es-CL')} />
         <StatCard label="SKUs activos" value={new Set(agg.map(r => r.sku)).size} />
@@ -57,7 +57,6 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
         )}
       </div>
 
-      {/* Risk bars */}
       <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>
           Distribución de cajas por % de vida útil
@@ -76,9 +75,15 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
             </div>
           )
         })}
+        {(rg['Sin control'] > 0 || rg['Sin dato'] > 0) && (
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+            {rg['Sin control'] > 0 && `${rc['Sin control'].toLocaleString()} cajas sin control de vencimiento (perfiles 600/999/1100/9999)`}
+            {rg['Sin control'] > 0 && rg['Sin dato'] > 0 && ' · '}
+            {rg['Sin dato'] > 0 && `${rc['Sin dato'].toLocaleString()} cajas sin dato de vida útil`}
+          </div>
+        )}
       </div>
 
-      {/* Top alerts */}
       {criticos.slice(0, 4).map((r, i) => {
         const pct = pctVida(r)
         return (
