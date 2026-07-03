@@ -35,6 +35,8 @@ export default function App() {
   const [toast,        setToast]        = useState(null)
   const [showCdSel,    setShowCdSel]    = useState(false)
   const [selectedDate, setSelectedDate] = useState(null)
+  const [estadosActivos, setEstadosActivos] = useState(null) // null = todos
+  const [showEstados, setShowEstados] = useState(false)
 
   useEffect(() => {
     const data = loadStorage()
@@ -129,7 +131,18 @@ export default function App() {
   }
 
   // Snapshot seleccionado (por defecto el último)
-  const snapshots  = activeCd ? (allData[activeCd] || []) : []
+  const snapshotsRaw = activeCd ? (allData[activeCd] || []) : []
+
+  // Todos los estados presentes en el CD
+  const estadosDisponibles = [...new Set(
+    snapshotsRaw.flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
+  )].sort()
+
+  // Filtrar filas por estado activo (null = todos)
+  const filtraEstado = (rows) =>
+    estadosActivos === null ? rows : rows.filter(r => estadosActivos.includes(r.estado || 'Sin estado'))
+
+  const snapshots  = snapshotsRaw.map(s => ({ ...s, rows: filtraEstado(s.rows) }))
   const latestIdx  = selectedDate
     ? snapshots.findIndex(s => s.date === selectedDate)
     : snapshots.length - 1
@@ -200,7 +213,6 @@ export default function App() {
       {/* ── SELECTOR DE SNAPSHOT + TABS ── */}
       {activeCd && (
         <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0' }}>
-
           {/* Selector de día */}
           {snapshots.length > 1 && (
             <div style={{ padding: '8px 24px 0', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #f1f5f9' }}>
@@ -238,9 +250,48 @@ export default function App() {
                   vs {prev.date}
                 </span>
               )}
+
+              {/* Selector de Estado */}
+              <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                <button onClick={() => setShowEstados(v => !v)}
+                  style={{ background: estadosActivos === null ? '#f1f5f9' : '#0f172a', color: estadosActivos === null ? '#475569' : 'white', border: '1px solid ' + (estadosActivos === null ? '#e2e8f0' : '#0f172a'), borderRadius: 6, padding: '3px 12px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  Estado{estadosActivos !== null ? ` · ${estadosActivos.length}` : ''}
+                  <span style={{ fontSize: 9 }}>▼</span>
+                </button>
+                {showEstados && (
+                  <div style={{ position: 'absolute', top: '110%', right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 30, padding: 8, minWidth: 180 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4, borderBottom: '1px solid #f1f5f9' }}>
+                      <button onClick={() => setEstadosActivos(null)}
+                        style={{ background: 'none', border: 'none', color: '#0369a1', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+                        Todos
+                      </button>
+                      <button onClick={() => setEstadosActivos([])}
+                        style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+                        Ninguno
+                      </button>
+                    </div>
+                    {estadosDisponibles.map(est => {
+                      const activo = estadosActivos === null || estadosActivos.includes(est)
+                      return (
+                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', fontSize: 12, cursor: 'pointer', borderRadius: 4 }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          <input type="checkbox" checked={activo}
+                            onChange={() => {
+                              const base = estadosActivos === null ? estadosDisponibles : estadosActivos
+                              if (activo) setEstadosActivos(base.filter(x => x !== est))
+                              else setEstadosActivos([...base, est])
+                            }}
+                          />
+                          <span style={{ color: '#1e293b' }}>{est}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
-
           {/* Tabs */}
           <nav style={{ padding: '0 24px', display: 'flex', overflowX: 'auto' }}>
             {ANALYSIS_TABS.map(t => (
