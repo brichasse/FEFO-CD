@@ -154,7 +154,10 @@ export default function App() {
 
   // Todos los estados presentes en el CD
   const estadosDisponibles = [...new Set(
-    snapshotsRaw.flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
+    (tab === 'resumen'
+      ? Object.values(allData).flat().flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
+      : snapshotsRaw.flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
+    )
   )].sort()
 
   // Filtrar filas por estado activo (null = todos)
@@ -330,7 +333,11 @@ export default function App() {
       {/* ── CONTENT ── */}
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '24px' }}>
         {tab === 'resumen' ? (
-          <Resumen allData={allData} onSelectCd={(cd) => { setActiveCd(cd); setSelectedDate(null); setTab('dashboard') }} />
+          <Resumen
+            allData={allData}
+            filtraEstado={filtraEstado}
+            onSelectCd={(cd) => { setActiveCd(cd); setSelectedDate(null); setTab('dashboard') }}
+          />
         ) : !activeCd ? (
           <div style={{ textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }}>
             <div style={{ fontSize: 52, marginBottom: 16 }}>📦</div>
