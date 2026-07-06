@@ -1,15 +1,18 @@
 import { pctVida, classifyPct, calcDiff } from '../fefo.js'
 import { TH, TD, EmptyState } from '../components.jsx'
 
-export default function Resumen({ allData, onSelectCd }) {
+export default function Resumen({ allData, filtraEstado, onSelectCd }) {
   const cds = Object.keys(allData)
   if (cds.length === 0) return <EmptyState icon="🏢" text="Sube una base para ver el resumen de centros." />
+
+  // Si no se pasa filtraEstado, usar identidad (sin filtro)
+  const filtrar = filtraEstado || ((rows) => rows)
 
   const filas = cds.map(cd => {
     const snaps = allData[cd] || []
     const latest = snaps[snaps.length - 1]
     const prev = snaps[snaps.length - 2]
-    const rows = latest ? latest.rows : []
+    const rows = latest ? filtrar(latest.rows) : []
 
     const totCajas = rows.reduce((s, r) => s + r.cajas, 0)
     const skus = new Set(rows.map(r => r.sku)).size
@@ -23,7 +26,8 @@ export default function Resumen({ allData, onSelectCd }) {
       else if (c.nivel === 2) { alertas++ }
     }
 
-    const diff = prev && latest ? calcDiff(prev.rows, latest.rows) : null
+    // FEFO se calcula sobre datos filtrados también
+    const diff = prev && latest ? calcDiff(filtrar(prev.rows), filtrar(latest.rows)) : null
     const incumple = diff ? diff.incumple.length : null
 
     return { cd, fecha: latest?.date, snaps: snaps.length, totCajas, skus, urgentes, criticos, alertas, cjUrgente, cjCritico, incumple }
