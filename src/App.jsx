@@ -198,9 +198,14 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => setTab('resumen')}
+                style={{ background: tab === 'resumen' ? '#0369a1' : '#f1f5f9', color: tab === 'resumen' ? 'white' : '#475569', border: '1px solid ' + (tab === 'resumen' ? '#0369a1' : '#e2e8f0'), borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
+                🏢 Resumen
+              </button>
+              <span style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 2px' }} />
               {cds.map(cd => (
                 <button key={cd} onClick={() => { setActiveCd(cd); setTab('dashboard') }}
-                  style={{ background: cd === activeCd ? '#0f172a' : '#f1f5f9', color: cd === activeCd ? 'white' : '#475569', border: '1px solid ' + (cd === activeCd ? '#0f172a' : '#e2e8f0'), borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: cd === activeCd ? 600 : 400, cursor: 'pointer', transition: 'all .15s' }}>
+                  style={{ background: cd === activeCd && tab !== 'resumen' ? '#0f172a' : '#f1f5f9', color: cd === activeCd && tab !== 'resumen' ? 'white' : '#475569', border: '1px solid ' + (cd === activeCd && tab !== 'resumen' ? '#0f172a' : '#e2e8f0'), borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: cd === activeCd ? 600 : 400, cursor: 'pointer', transition: 'all .15s' }}>
                   {cd}
                 </button>
               ))}
@@ -212,7 +217,6 @@ export default function App() {
             </div>
           )}
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {activeCd && latest && (
             <span style={{ fontSize: 11, color: '#94a3b8' }}>
