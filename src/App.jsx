@@ -66,50 +66,67 @@ export default function App() {
     setBusy(true)
     try {
       const text = await file.text()
-      const { rows: rawRows, cd } = parseCSV(text)
-      if (!rawRows.length || !cd) {
-        showToast('No se detectó CD válido en el archivo.', false)
+      const porCD = parseCSV(text)
+      const cdsEncontrados = Object.keys(porCD)
+
+      if (cdsEncontrados.length === 0) {
+        showToast('No se detectó ningún CD válido en el archivo.', false)
         setBusy(false)
         return
       }
-      const rows = aggregateRows(rawRows)
+
+      // Fecha desde el nombre del archivo
       const m = file.name.match(/(\d{2})[_\-](\d{2})/)
       const date = m ? `${m[1]}/${m[2]}/2026` : new Date().toLocaleDateString('es-CL')
 
-      const current = allData[cd] || []
-      if (current.some(s => s.date === date)) {
-        showToast(`Ya existe snapshot del ${date} para ${cd}.`, false)
-        setBusy(false)
-        return
-      }
+      const newData = { ...allData }
+      const resumen = []
+      let algunoNuevo = false
 
-      // Clave sku+fv (sin área) para ignorar movimientos internos entre ubicaciones
-      const prevFechas = {}
-      for (const snap of current) {
-        for (const r of snap.rows) {
-          const k = `${r.sku}||${r.fv}`
-          if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
+      for (const cd of cdsEncontrados) {
+        const rows = aggregateRows(porCD[cd])
+        const current = newData[cd] || []
+
+        if (current.some(s => s.date === date)) {
+          resumen.push(`${cd}: ya existía`)
+          continue
         }
-      }
-      const rowsConFecha = rows.map(r => {
-        const k = `${r.sku}||${r.fv}`
-        return { ...r, fechaDeteccion: prevFechas[k] ?? date }
-      })
 
-      const newSnaps = [...current, { date, rows: rowsConFecha }].sort((a, b) =>
-        a.date.split('/').reverse().join('').localeCompare(b.date.split('/').reverse().join(''))
-      )
-      const newData = { ...allData, [cd]: newSnaps }
+        // fechaDeteccion heredada por sku+fv
+        const prevFechas = {}
+        for (const snap of current) {
+          for (const r of snap.rows) {
+            const k = `${r.sku}||${r.fv}`
+            if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
+          }
+        }
+        const rowsConFecha = rows.map(r => {
+          const k = `${r.sku}||${r.fv}`
+          return { ...r, fechaDeteccion: prevFechas[k] ?? date }
+        })
+
+        newData[cd] = [...current, { date, rows: rowsConFecha }].sort((a, b) =>
+          a.date.split('/').reverse().join('').localeCompare(b.date.split('/').reverse().join(''))
+        )
+        resumen.push(`${cd}: ${rows.length.toLocaleString()} reg`)
+        algunoNuevo = true
+      }
+
       save(newData)
-      setActiveCd(cd)
-      setSelectedDate(date)
-      setTab('dashboard')
-      showToast(`✓ ${cd} · ${date} cargado — ${rows.length.toLocaleString()} registros`)
+
+      if (algunoNuevo) {
+        if (!activeCd || !newData[activeCd]) setActiveCd(cdsEncontrados[0])
+        setSelectedDate(date)
+        setTab('dashboard')
+        showToast(`✓ ${date} · ${resumen.join(' · ')}`)
+      } else {
+        showToast(`Sin cambios · ${resumen.join(' · ')}`, false)
+      }
     } catch (e) {
       showToast('Error al leer el archivo.', false)
     }
     setBusy(false)
-  }, [allData])
+  }, [allData, activeCd])
 
   const onDelete = (date) => {
     if (!activeCd) return
