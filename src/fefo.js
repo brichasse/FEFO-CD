@@ -41,8 +41,7 @@ export function classify(dias) {
 }
 
 export function parseCSV(text) {
-  const rows = []
-  let cdDetectado = null
+  const porCD = {}          // { CD: [rows] }
   let ultimoCd = null
 
   const lineas = []
@@ -60,15 +59,15 @@ export function parseCSV(text) {
     const p = t.split(';')
     if (p.length < 9) continue
 
-    const col0 = p[0].replace(/"/g, '').trim()
+    const col0 = p[0].replace(/"/g, '').replace(/\uFEFF/g, '').trim()
 
     if (col0 && col0 !== 'Id. de almacen' && col0 !== 'Centro' && col0 !== 'centro') {
-      if (!cdDetectado) cdDetectado = col0
       ultimoCd = col0
     }
 
     const cdFila = col0 || ultimoCd
     if (!cdFila) continue
+    if (cdFila === 'Id. de almacen' || cdFila === 'Centro' || cdFila === 'centro') continue
 
     const area = p[1].replace(/["\n]/g, '').trim()
     if (!area) continue
@@ -80,7 +79,8 @@ export function parseCSV(text) {
     const cajas = parseInt(p[8])
     if (!p[2] || isNaN(dias) || isNaN(cajas) || dias < 0) continue
 
-    rows.push({
+    if (!porCD[cdFila]) porCD[cdFila] = []
+    porCD[cdFila].push({
       cd:   cdFila,
       sku:  p[2].trim(),
       desc: p[3].trim(),
@@ -93,9 +93,8 @@ export function parseCSV(text) {
     })
   }
 
-  return { rows, cd: cdDetectado }
+  return porCD   // { CD1500: [...], RENCA: [...] }
 }
-
 export function aggregateRows(rows) {
   const map = {}
   for (const r of rows) {
