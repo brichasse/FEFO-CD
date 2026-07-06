@@ -6,6 +6,7 @@ import FEFOTab   from './tabs/FEFO.jsx'
 import Ingresos  from './tabs/Ingresos.jsx'
 import Snapshots from './tabs/Snapshots.jsx'
 import CDSelector from './tabs/CDSelector.jsx'
+import Resumen from './tabs/Resumen.jsx'
 
 const ANALYSIS_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -324,11 +325,13 @@ export default function App() {
 
       {/* ── CONTENT ── */}
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '24px' }}>
-        {!activeCd ? (
+        {tab === 'resumen' ? (
+          <Resumen allData={allData} onSelectCd={(cd) => { setActiveCd(cd); setSelectedDate(null); setTab('dashboard') }} />
+        ) : !activeCd ? (
           <div style={{ textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }}>
             <div style={{ fontSize: 52, marginBottom: 16 }}>📦</div>
             <div style={{ fontSize: 16, fontWeight: 500, color: '#64748b', marginBottom: 8 }}>Sin datos aún</div>
-            <div style={{ fontSize: 13 }}>Sube un CSV — el CD se detecta automáticamente desde el archivo</div>
+            <div style={{ fontSize: 13 }}>Sube un CSV — los centros se detectan automáticamente desde el archivo</div>
           </div>
         ) : (
           <>
