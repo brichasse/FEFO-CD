@@ -123,7 +123,8 @@ export default function App() {
         showToast(`Sin cambios · ${resumen.join(' · ')}`, false)
       }
     } catch (e) {
-      showToast('Error al leer el archivo.', false)
+      console.error('Error en onFile:', e)
+      showToast('Error: ' + e.message, false)
     }
     setBusy(false)
   }, [allData, activeCd])
