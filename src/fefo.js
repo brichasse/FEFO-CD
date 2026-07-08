@@ -186,3 +186,165 @@ export function calcDiff(prev, curr) {
 
   return { salidos, nuevos, ok, riesgo, incumple, abastecimiento }
 }
+
+// ── Cumplimiento FEFO semanal ──
+
+function parseFecha(f) {
+  const [d, m, y] = f.split('/').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// Semana ISO de una fecha "DD/MM/YYYY" → "2026-W26"
+export function getSemanaISO(fechaStr) {
+  const date = parseFecha(fechaStr)
+  const target = new Date(date.valueOf())
+  const dayNr = (date.getDay() + 6) % 7
+  target.setDate(target.getDate() - dayNr + 3)
+  const firstThursday = target.valueOf()
+  target.setMonth(0, 1)
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7)
+  }
+  const semana = 1 + Math.ceil((firstThursday - target) / 604800000)
+  return `${date.getFullYear()}-W${String(semana).padStart(2, '0')}`
+}
+
+// Lunes de la semana de una fecha → "DD/MM/YYYY"
+export function lunesDeLaSemana(fechaStr) {
+  const date = parseFecha(fechaStr)
+  const dayNr = (date.getDay() + 6) % 7
+  date.setDate(date.getDate() - dayNr)
+  return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`
+}
+
+// Cumplimiento FEFO por cajas entre dos snapshots (lunes vs lunes)
+// Devuelve cajas despachadas OK, total despachado, y conteos de eventos
+export function calcCumplimientoCajas(prevRows, currRows) {
+  // Agrupar por sku+fv para tener cajas por lote
+  const agrupa = (rows) => {
+    const m = {}
+    for (const r of rows) {
+      const k = `${r.sku}||${r.fv}`
+      if (!m[k]) m[k] = { sku: r.sku, fv: r.fv, dias: r.dias, cajas: 0, areas: new Set() }
+      m[k].cajas += r.cajas
+      m[k].areas.add(r.area)
+    }
+    return m
+  }
+
+  const pm = agrupa(prevRows)
+  const cm = agrupa(currRows)
+
+  // Lotes por SKU
+  const porSku = {}
+  for (const k of Object.keys(pm)) {
+    const { sku } = pm[k]
+    if (!porSku[sku]) porSku[sku] = []
+    porSku[sku].push(pm[k])
+  }
+
+  let cajasDespachadas = 0   // total bajado de SKUs con FEFO aplicable
+  let cajasIncumplidas = 0   // cajas despachadas del lote incorrecto
+  let nIncumple = 0
+  let nAbastecimiento = 0
+
+  const { esAlmacenamiento, esPicking } = clasificadoresArea()
+
+  for (const sku of Object.keys(porSku)) {
+    const lotes = porSku[sku].sort((a, b) => a.dias - b.dias)
+    if (lotes.length < 2) continue  // FEFO no aplica con un solo lote
+
+    // Delta de cada lote (cuánto bajó entre prev y curr)
+    const deltas = lotes.map(l => {
+      const kc = `${l.sku}||${l.fv}`
+      const cajasCurr = cm[kc] ? cm[kc].cajas : 0
+      return { ...l, despachado: Math.max(0, l.cajas - cajasCurr) }
+    })
+
+    const totalDespachadoSku = deltas.reduce((s, d) => s + d.despachado, 0)
+    if (totalDespachadoSku <= 5) continue  // sin movimiento relevante
+
+    cajasDespachadas += totalDespachadoSku
+
+    // El lote más antiguo es el que "debería" despacharse primero
+    const antiguo = deltas[0]
+    const nuevos = deltas.slice(1)
+
+    // Cajas despachadas de lotes más nuevos que el antiguo = potencial incumplimiento
+    for (const nv of nuevos) {
+      if (nv.despachado <= 5) continue
+
+      const antSoloPicking = [...antiguo.areas].every(a => esPicking(a))
+      const antTieneAlmacen = [...antiguo.areas].some(a => esAlmacenamiento(a))
+      const nvTieneAlmacen = [...nv.areas].some(a => esAlmacenamiento(a))
+      const nvSoloPicking = [...nv.areas].every(a => esPicking(a))
+
+      // El antiguo tenía stock disponible sin moverse?
+      const antiguoSinMover = antiguo.despachado <= 5
+
+      if (!antiguoSinMover) continue  // si el antiguo también se despachó, no es incumplimiento puro
+
+      if (antSoloPicking && nvTieneAlmacen) {
+        // Pallet completo → cumplimiento, no cuenta
+      } else if (antTieneAlmacen && !nvTieneAlmacen && nvSoloPicking) {
+        // Abastecimiento → registrar aparte, no afecta FEFO
+        nAbastecimiento++
+      } else {
+        // Incumplimiento real
+        nIncumple++
+        cajasIncumplidas += nv.despachado
+      }
+    }
+  }
+
+  const cajasOK = cajasDespachadas - cajasIncumplidas
+  const pctCajas = cajasDespachadas > 0 ? cajasOK / cajasDespachadas * 100 : null
+
+  return { pctCajas, cajasOK, cajasDespachadas, cajasIncumplidas, nIncumple, nAbastecimiento }
+}
+
+// Helper: clasificadores de área (mismo criterio que calcDiff)
+function clasificadoresArea() {
+  const ALM = ['ALMACENAMIENTO', 'VNA', 'CARPA', 'MIXTOS']
+  const EXC = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
+  const esAlmacenamiento = (a) => ALM.some(p => a.toUpperCase().includes(p))
+  const esExcluida = (a) => EXC.some(p => a.toUpperCase().includes(p))
+  const esPicking = (a) => !esAlmacenamiento(a) && !esExcluida(a)
+  return { esAlmacenamiento, esPicking }
+}
+
+// Agrupa snapshots por semana ISO y calcula cumplimiento semana vs semana anterior
+export function calcCumplimientoSemanal(snapshots) {
+  if (!snapshots || snapshots.length < 2) return []
+
+  // Agrupar por semana, elegir representativo = más temprano de cada semana
+  const porSemana = {}
+  for (const snap of snapshots) {
+    const sem = getSemanaISO(snap.date)
+    if (!porSemana[sem] || parseFecha(snap.date) < parseFecha(porSemana[sem].date)) {
+      porSemana[sem] = snap
+    }
+  }
+
+  // Ordenar semanas cronológicamente
+  const semanas = Object.keys(porSemana).sort()
+
+  const resultado = []
+  for (let i = 1; i < semanas.length; i++) {
+    const semActual = semanas[i]
+    const semPrev = semanas[i - 1]
+    const repActual = porSemana[semActual]
+    const repPrev = porSemana[semPrev]
+
+    const c = calcCumplimientoCajas(repPrev.rows, repActual.rows)
+    resultado.push({
+      semana: semActual,
+      lunes: lunesDeLaSemana(repActual.date),
+      fechaRep: repActual.date,
+      fechaRepPrev: repPrev.date,
+      ...c,
+    })
+  }
+
+  return resultado
+}
