@@ -63,71 +63,81 @@ export default function App() {
     saveStorage(data)
   }
 
-  const onFile = useCallback(async (file) => {
-    if (!file) return
+  const onFiles = useCallback(async (fileList) => {
+    const files = Array.from(fileList || [])
+    if (files.length === 0) return
     setBusy(true)
-    try {
-      const text = await file.text()
-      const porCD = parseCSV(text)
-      const cdsEncontrados = Object.keys(porCD)
 
-      if (cdsEncontrados.length === 0) {
-        showToast('No se detectó ningún CD válido en el archivo.', false)
-        setBusy(false)
-        return
-      }
-
-      // Fecha desde el nombre del archivo
+    // Ordenar archivos por fecha detectada en el nombre (más antiguo primero)
+    const conFecha = files.map(file => {
       const m = file.name.match(/(\d{2})[_\-](\d{2})/)
-      const date = m ? `${m[1]}/${m[2]}/2026` : new Date().toLocaleDateString('es-CL')
+      const date = m ? `${m[1]}/${m[2]}/2026` : null
+      return { file, date, orden: date ? date.split('/').reverse().join('') : '0' }
+    }).sort((a, b) => a.orden.localeCompare(b.orden))
 
-      const newData = { ...allData }
-      const resumen = []
-      let algunoNuevo = false
+    let newData = { ...allData }
+    let procesados = 0, omitidos = 0
+    let ultimaFecha = null, ultimoCd = null
+    const errores = []
 
-      for (const cd of cdsEncontrados) {
-        const rows = aggregateRows(porCD[cd])
-        const current = newData[cd] || []
+    for (const { file, date: dateFromName } of conFecha) {
+      try {
+        const text = await file.text()
+        const porCD = parseCSV(text)
+        const cdsEncontrados = Object.keys(porCD)
+        if (cdsEncontrados.length === 0) { errores.push(`${file.name}: sin CD`); continue }
 
-        if (current.some(s => s.date === date)) {
-          resumen.push(`${cd}: ya existía`)
-          continue
-        }
+        const date = dateFromName || new Date().toLocaleDateString('es-CL')
 
-        // fechaDeteccion heredada por sku+fv
-        const prevFechas = {}
-        for (const snap of current) {
-          for (const r of snap.rows) {
-            const k = `${r.sku}||${r.fv}`
-            if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
+        for (const cd of cdsEncontrados) {
+          const rows = aggregateRows(porCD[cd])
+          const current = newData[cd] || []
+
+          if (current.some(s => s.date === date)) { omitidos++; continue }
+
+          const prevFechas = {}
+          for (const snap of current) {
+            for (const r of snap.rows) {
+              const k = `${r.sku}||${r.fv}`
+              if (!prevFechas[k]) prevFechas[k] = r.fechaDeteccion ?? snap.date
+            }
           }
+          const rowsConFecha = rows.map(r => {
+            const k = `${r.sku}||${r.fv}`
+            return { ...r, fechaDeteccion: prevFechas[k] ?? date }
+          })
+
+          newData[cd] = [...current, { date, rows: rowsConFecha }].sort((a, b) =>
+            a.date.split('/').reverse().join('').localeCompare(b.date.split('/').reverse().join(''))
+          )
+          procesados++
+          ultimaFecha = date
+          ultimoCd = cd
         }
-        const rowsConFecha = rows.map(r => {
-          const k = `${r.sku}||${r.fv}`
-          return { ...r, fechaDeteccion: prevFechas[k] ?? date }
-        })
-
-        newData[cd] = [...current, { date, rows: rowsConFecha }].sort((a, b) =>
-          a.date.split('/').reverse().join('').localeCompare(b.date.split('/').reverse().join(''))
-        )
-        resumen.push(`${cd}: ${rows.length.toLocaleString()} reg`)
-        algunoNuevo = true
+      } catch (e) {
+        console.error('Error procesando', file.name, e)
+        errores.push(`${file.name}: ${e.message}`)
       }
-
-      save(newData)
-
-      if (algunoNuevo) {
-        if (!activeCd || !newData[activeCd]) setActiveCd(cdsEncontrados[0])
-        setSelectedDate(date)
-        setTab('dashboard')
-        showToast(`✓ ${date} · ${resumen.join(' · ')}`)
-      } else {
-        showToast(`Sin cambios · ${resumen.join(' · ')}`, false)
-      }
-    } catch (e) {
-      console.error('Error en onFile:', e)
-      showToast('Error: ' + e.message, false)
     }
+
+    save(newData)
+
+    if (procesados > 0) {
+      if (!activeCd || !newData[activeCd]) setActiveCd(ultimoCd)
+      setSelectedDate(ultimaFecha)
+      setTab('dashboard')
+    }
+
+    // Resumen del resultado
+    const partes = []
+    if (procesados > 0) partes.push(`${procesados} snapshot${procesados > 1 ? 's' : ''} cargado${procesados > 1 ? 's' : ''}`)
+    if (omitidos > 0) partes.push(`${omitidos} ya existía${omitidos > 1 ? 'n' : ''}`)
+    if (errores.length > 0) partes.push(`${errores.length} con error`)
+    showToast(
+      (procesados > 0 ? '✓ ' : '') + (partes.join(' · ') || 'Sin cambios'),
+      procesados > 0 || omitidos > 0
+    )
+
     setBusy(false)
   }, [allData, activeCd])
 
@@ -153,7 +163,7 @@ export default function App() {
   // Snapshot seleccionado (por defecto el último)
   const snapshotsRaw = activeCd ? (allData[activeCd] || []) : []
 
-  // Todos los estados presentes en el CD
+  // Todos los estados presentes en el CD (o en todos si estamos en resumen)
   const estadosDisponibles = [...new Set(
     (tab === 'resumen'
       ? Object.values(allData).flat().flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
@@ -228,11 +238,11 @@ export default function App() {
             </span>
           )}
           <label style={{ cursor: busy ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, background: busy ? '#e2e8f0' : '#0f172a', color: busy ? '#64748b' : 'white', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 500, transition: 'background .15s' }}>
-            <input type="file" accept=".csv" style={{ display: 'none' }} onChange={e => onFile(e.target.files[0])} disabled={busy} />
+            <input type="file" accept=".csv" multiple style={{ display: 'none' }} onChange={e => { onFiles(e.target.files); e.target.value = '' }} disabled={busy} />
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            {busy ? 'Procesando…' : 'Subir CSV del día'}
+            {busy ? 'Procesando…' : 'Subir CSV'}
           </label>
         </div>
       </header>
@@ -351,7 +361,7 @@ export default function App() {
           <div style={{ textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }}>
             <div style={{ fontSize: 52, marginBottom: 16 }}>📦</div>
             <div style={{ fontSize: 16, fontWeight: 500, color: '#64748b', marginBottom: 8 }}>Sin datos aún</div>
-            <div style={{ fontSize: 13 }}>Sube un CSV — los centros se detectan automáticamente desde el archivo</div>
+            <div style={{ fontSize: 13 }}>Sube uno o varios CSV — los centros se detectan automáticamente desde el archivo</div>
           </div>
         ) : (
           <>
