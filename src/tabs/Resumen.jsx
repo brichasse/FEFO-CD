@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { pctVida, classifyPct, calcDiff, calcCumplimientoSemanal } from '../fefo.js'
+import { pctVida, classifyPct, calcDiff, calcCumplimientoSemanal, getSemanaISO } from '../fefo.js'
 import { TH, TD, EmptyState, StatCard } from '../components.jsx'
 
 export default function Resumen({ allData, filtraEstado, onSelectCd }) {
@@ -95,11 +95,15 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {semanasDisponibles.map(sem => {
                 const isSel = sem === semanaActiva
-                const lunes = (Object.values(cumplimientoPorCd).flat().find(x => x.semana === sem))?.lunes ?? sem
+                const registro = Object.values(cumplimientoPorCd).flat().find(x => x.semana === sem)
+                // Número de semana ISO del snapshot base (semana anterior de la comparación)
+                const numSemana = registro?.fechaRepPrev
+                  ? getSemanaISO(registro.fechaRepPrev).split('-W')[1]
+                  : sem.split('-W')[1]
                 return (
                   <button key={sem} onClick={() => setSemanaSel(sem)}
                     style={{ background: isSel ? '#0369a1' : '#f1f5f9', color: isSel ? 'white' : '#475569', border: '1px solid ' + (isSel ? '#0369a1' : '#e2e8f0'), borderRadius: 6, padding: '3px 10px', fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: isSel ? 600 : 400, cursor: 'pointer' }}>
-                    Sem {lunes}
+                    Semana {parseInt(numSemana)}
                   </button>
                 )
               })}
