@@ -220,7 +220,6 @@ export function lunesDeLaSemana(fechaStr) {
 // Cumplimiento FEFO por cajas entre dos snapshots (lunes vs lunes)
 // Devuelve cajas despachadas OK, total despachado, y conteos de eventos
 export function calcCumplimientoCajas(prevRows, currRows) {
-  // Agrupar por sku+fv para tener cajas por lote
   const agrupa = (rows) => {
     const m = {}
     for (const r of rows) {
@@ -235,7 +234,6 @@ export function calcCumplimientoCajas(prevRows, currRows) {
   const pm = agrupa(prevRows)
   const cm = agrupa(currRows)
 
-  // Lotes por SKU
   const porSku = {}
   for (const k of Object.keys(pm)) {
     const { sku } = pm[k]
@@ -243,8 +241,8 @@ export function calcCumplimientoCajas(prevRows, currRows) {
     porSku[sku].push(pm[k])
   }
 
-  let cajasDespachadas = 0   // total bajado de SKUs con FEFO aplicable
-  let cajasIncumplidas = 0   // cajas despachadas del lote incorrecto
+  let cajasDespachadas = 0
+  let cajasIncumplidas = 0
   let nIncumple = 0
   let nAbastecimiento = 0
 
@@ -252,47 +250,53 @@ export function calcCumplimientoCajas(prevRows, currRows) {
 
   for (const sku of Object.keys(porSku)) {
     const lotes = porSku[sku].sort((a, b) => a.dias - b.dias)
-    if (lotes.length < 2) continue  // FEFO no aplica con un solo lote
+    if (lotes.length < 2) continue
 
-    // Delta de cada lote (cuánto bajó entre prev y curr)
-    const deltas = lotes.map(l => {
+    // Estado de cada lote: cajas al inicio, al final, y despachado
+    const info = lotes.map(l => {
       const kc = `${l.sku}||${l.fv}`
-      const cajasCurr = cm[kc] ? cm[kc].cajas : 0
-      return { ...l, despachado: Math.max(0, l.cajas - cajasCurr) }
+      const cajasFin = cm[kc] ? cm[kc].cajas : 0
+      return {
+        ...l,
+        cajasIni: l.cajas,
+        cajasFin,
+        despachado: Math.max(0, l.cajas - cajasFin),
+      }
     })
 
-    const totalDespachadoSku = deltas.reduce((s, d) => s + d.despachado, 0)
-    if (totalDespachadoSku <= 5) continue  // sin movimiento relevante
+    const totalDespachadoSku = info.reduce((s, d) => s + d.despachado, 0)
+    if (totalDespachadoSku <= 5) continue
 
     cajasDespachadas += totalDespachadoSku
 
-    // El lote más antiguo es el que "debería" despacharse primero
-    const antiguo = deltas[0]
-    const nuevos = deltas.slice(1)
-
-    // Cajas despachadas de lotes más nuevos que el antiguo = potencial incumplimiento
-    for (const nv of nuevos) {
+    // Recorrer cada lote como "nuevo" y ver si había un lote más antiguo con stock disponible
+    for (let j = 0; j < info.length; j++) {
+      const nv = info[j]
       if (nv.despachado <= 5) continue
 
-      const antSoloPicking = [...antiguo.areas].every(a => esPicking(a))
-      const antTieneAlmacen = [...antiguo.areas].some(a => esAlmacenamiento(a))
-      const nvTieneAlmacen = [...nv.areas].some(a => esAlmacenamiento(a))
-      const nvSoloPicking = [...nv.areas].every(a => esPicking(a))
+      // ¿Hay algún lote más antiguo (índice menor) que todavía tenía stock disponible durante el período?
+      for (let a = 0; a < j; a++) {
+        const ant = info[a]
+        // El antiguo tenía stock disponible si no se agotó (le quedaban cajas al final o al inicio tenía y no salió todo)
+        const antiguoConStock = ant.cajasFin > 5 || (ant.cajasIni > 5 && ant.despachado < ant.cajasIni)
+        if (!antiguoConStock) continue
 
-      // El antiguo tenía stock disponible sin moverse?
-      const antiguoSinMover = antiguo.despachado <= 5
+        const antSoloPicking  = [...ant.areas].every(x => esPicking(x))
+        const antTieneAlmacen = [...ant.areas].some(x => esAlmacenamiento(x))
+        const nvTieneAlmacen  = [...nv.areas].some(x => esAlmacenamiento(x))
+        const nvSoloPicking   = [...nv.areas].every(x => esPicking(x))
 
-      if (!antiguoSinMover) continue  // si el antiguo también se despachó, no es incumplimiento puro
-
-      if (antSoloPicking && nvTieneAlmacen) {
-        // Pallet completo → cumplimiento, no cuenta
-      } else if (antTieneAlmacen && !nvTieneAlmacen && nvSoloPicking) {
-        // Abastecimiento → registrar aparte, no afecta FEFO
-        nAbastecimiento++
-      } else {
-        // Incumplimiento real
-        nIncumple++
-        cajasIncumplidas += nv.despachado
+        if (antSoloPicking && nvTieneAlmacen) {
+          // Pallet completo → cumplimiento, no cuenta
+        } else if (antTieneAlmacen && !nvTieneAlmacen && nvSoloPicking) {
+          // Abastecimiento → registro aparte
+          nAbastecimiento++
+        } else {
+          // Incumplimiento real: las cajas del nuevo son incumplidas
+          nIncumple++
+          cajasIncumplidas += nv.despachado
+        }
+        break  // basta un antiguo con stock para marcar incumplimiento; no doble-contar
       }
     }
   }
