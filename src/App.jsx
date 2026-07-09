@@ -38,6 +38,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(null)
   const [estadosActivos, setEstadosActivos] = useState(null) // null = todos
   const [showEstados, setShowEstados] = useState(false)
+  const [showDias, setShowDias] = useState(false)
 
   useEffect(() => {
     const data = loadStorage()
@@ -243,34 +244,39 @@ export default function App() {
           {snapshots.length > 1 && (
             <div style={{ padding: '8px 24px 0', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #f1f5f9' }}>
               <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>Viendo:</span>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {snapshots.map((s, i) => {
-                  const isSelected = latest?.date === s.date
-                  const isLast = i === snapshots.length - 1
-                  return (
-                    <button key={s.date} onClick={() => setSelectedDate(s.date)}
-                      style={{
-                        background: isSelected ? '#0f172a' : '#f1f5f9',
-                        color: isSelected ? 'white' : '#475569',
-                        border: '1px solid ' + (isSelected ? '#0f172a' : '#e2e8f0'),
-                        borderRadius: 6,
-                        padding: '3px 10px',
-                        fontSize: 11,
-                        fontFamily: "'DM Mono', monospace",
-                        fontWeight: isSelected ? 600 : 400,
-                        cursor: 'pointer',
-                        transition: 'all .15s',
-                      }}>
-                      {s.date}
-                      {isLast && (
-                        <span style={{ marginLeft: 5, fontSize: 9, background: isSelected ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: isSelected ? 'white' : '#94a3b8', borderRadius: 3, padding: '1px 4px' }}>
-                          último
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+
+              {/* Dropdown de días */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button onClick={() => setShowDias(v => !v)}
+                  style={{ background: '#0f172a', color: 'white', border: '1px solid #0f172a', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {latest?.date}
+                  {latestIdx === snapshots.length - 1 && (
+                    <span style={{ fontSize: 9, background: 'rgba(255,255,255,0.25)', color: 'white', borderRadius: 3, padding: '1px 4px' }}>último</span>
+                  )}
+                  <span style={{ fontSize: 9 }}>▼</span>
+                </button>
+                {showDias && (
+                  <>
+                    <div onClick={() => setShowDias(false)} style={{ position: 'fixed', inset: 0, zIndex: 25 }} />
+                    <div style={{ position: 'absolute', top: '110%', left: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 30, padding: 4, minWidth: 150, maxHeight: 280, overflowY: 'auto' }}>
+                      {[...snapshots].reverse().map((s, ri) => {
+                        const isSelected = latest?.date === s.date
+                        const isLast = ri === 0
+                        return (
+                          <button key={s.date} onClick={() => { setSelectedDate(s.date); setShowDias(false) }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: isSelected ? '#f0f9ff' : 'transparent', color: isSelected ? '#0369a1' : '#1e293b', border: 'none', borderRadius: 4, padding: '6px 10px', fontSize: 12, fontFamily: "'DM Mono', monospace", fontWeight: isSelected ? 600 : 400, cursor: 'pointer' }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc' }}
+                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                            {s.date}
+                            {isLast && <span style={{ fontSize: 9, background: '#e2e8f0', color: '#94a3b8', borderRadius: 3, padding: '1px 4px' }}>último</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
+
               {prev && (
                 <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4, flexShrink: 0 }}>
                   vs {prev.date}
@@ -285,35 +291,38 @@ export default function App() {
                   <span style={{ fontSize: 9 }}>▼</span>
                 </button>
                 {showEstados && (
-                  <div style={{ position: 'absolute', top: '110%', right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 30, padding: 8, minWidth: 180 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4, borderBottom: '1px solid #f1f5f9' }}>
-                      <button onClick={() => setEstadosActivos(null)}
-                        style={{ background: 'none', border: 'none', color: '#0369a1', fontSize: 11, cursor: 'pointer', padding: 0 }}>
-                        Todos
-                      </button>
-                      <button onClick={() => setEstadosActivos([])}
-                        style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', padding: 0 }}>
-                        Ninguno
-                      </button>
+                  <>
+                    <div onClick={() => setShowEstados(false)} style={{ position: 'fixed', inset: 0, zIndex: 25 }} />
+                    <div style={{ position: 'absolute', top: '110%', right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 30, padding: 8, minWidth: 180 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4, borderBottom: '1px solid #f1f5f9' }}>
+                        <button onClick={() => setEstadosActivos(null)}
+                          style={{ background: 'none', border: 'none', color: '#0369a1', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+                          Todos
+                        </button>
+                        <button onClick={() => setEstadosActivos([])}
+                          style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+                          Ninguno
+                        </button>
+                      </div>
+                      {estadosDisponibles.map(est => {
+                        const activo = estadosActivos === null || estadosActivos.includes(est)
+                        return (
+                          <label key={est} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', fontSize: 12, cursor: 'pointer', borderRadius: 4 }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <input type="checkbox" checked={activo}
+                              onChange={() => {
+                                const base = estadosActivos === null ? estadosDisponibles : estadosActivos
+                                if (activo) setEstadosActivos(base.filter(x => x !== est))
+                                else setEstadosActivos([...base, est])
+                              }}
+                            />
+                            <span style={{ color: '#1e293b' }}>{est}</span>
+                          </label>
+                        )
+                      })}
                     </div>
-                    {estadosDisponibles.map(est => {
-                      const activo = estadosActivos === null || estadosActivos.includes(est)
-                      return (
-                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', fontSize: 12, cursor: 'pointer', borderRadius: 4 }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <input type="checkbox" checked={activo}
-                            onChange={() => {
-                              const base = estadosActivos === null ? estadosDisponibles : estadosActivos
-                              if (activo) setEstadosActivos(base.filter(x => x !== est))
-                              else setEstadosActivos([...base, est])
-                            }}
-                          />
-                          <span style={{ color: '#1e293b' }}>{est}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
+                  </>
                 )}
               </div>
             </div>
