@@ -4,14 +4,12 @@ import { TH, TD, EmptyState, StatCard } from '../components.jsx'
 
 function semanaDe(fechaStr) {
   const [d, m, y] = fechaStr.split('/').map(Number)
-  const date = new Date(y, m - 1, d)
-  const target = new Date(date.valueOf())
-  const dayNr = (date.getDay() + 6) % 7
-  target.setDate(target.getDate() - dayNr + 3)
-  const firstThursday = target.valueOf()
-  target.setMonth(0, 1)
-  if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7)
-  return 1 + Math.ceil((firstThursday - target) / 604800000)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  const dayNr = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - dayNr + 3)   // jueves de esa semana
+  const jueves = date.valueOf()
+  const ene1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))
+  return 1 + Math.round(((jueves - ene1) / 86400000 - 3 + ((ene1.getUTCDay() + 6) % 7)) / 7)
 }
 
 export default function Resumen({ allData, filtraEstado, onSelectCd }) {
