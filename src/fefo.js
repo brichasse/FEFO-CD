@@ -220,33 +220,32 @@ export function lunesDeLaSemana(fechaStr) {
 // Cumplimiento FEFO por cajas entre dos snapshots (lunes vs lunes)
 // Devuelve cajas despachadas OK, total despachado, y conteos de eventos
 export function calcCumplimientoCajas(prevRows, currRows) {
-  const agrupa = (rows) => {
-    const m = {}
+  // Agrupa a nivel lote y también guarda cajas por área
+  const build = (rows) => {
+    const lot = {}, area = {}
     for (const r of rows) {
       const k = `${r.sku}||${r.fv}`
-      if (!m[k]) m[k] = { sku: r.sku, fv: r.fv, dias: r.dias, cajas: 0, areas: new Set() }
-      m[k].cajas += r.cajas
-      m[k].areas.add(r.area)
+      if (!lot[k]) lot[k] = { sku: r.sku, fv: r.fv, dias: r.dias, cajas: 0, areas: new Set() }
+      lot[k].cajas += r.cajas
+      lot[k].areas.add(r.area)
+      const ka = `${r.sku}||${r.fv}||${r.area}`
+      area[ka] = (area[ka] ?? 0) + r.cajas
     }
-    return m
+    return { lot, area }
   }
 
-  const pm = agrupa(prevRows)
-  const cm = agrupa(currRows)
+  const { lot: pl, area: pa } = build(prevRows)
+  const { lot: cl, area: ca } = build(currRows)
 
   const porSku = {}
-  for (const k of Object.keys(pm)) {
-    const { sku } = pm[k]
+  for (const k of Object.keys(pl)) {
+    const { sku } = pl[k]
     if (!porSku[sku]) porSku[sku] = []
-    porSku[sku].push(pm[k])
+    porSku[sku].push(pl[k])
   }
 
-  let cajasDespachadas = 0   // solo SKU multi-lote (FEFO aplicable)
-  let cajasTodo = 0          // todo lo despachado, incluidos SKU de un solo lote
-  let cajasIncumplidas = 0
-  let nIncumple = 0
-  let nAbastecimiento = 0
-  let nEmpates = 0           // casos perdonados por días iguales
+  let cajasDespachadas = 0, cajasTodo = 0, cajasIncumplidas = 0
+  let nIncumple = 0, nAbastecimiento = 0, nEmpates = 0, nPalletCompleto = 0
 
   const { esAlmacenamiento, esPicking } = clasificadoresArea()
 
@@ -255,16 +254,35 @@ export function calcCumplimientoCajas(prevRows, currRows) {
 
     const info = lotes.map(l => {
       const kc = `${l.sku}||${l.fv}`
-      const cajasFin = cm[kc] ? cm[kc].cajas : 0
-      return { ...l, cajasIni: l.cajas, cajasFin, despachado: Math.max(0, l.cajas - cajasFin) }
+      const cajasFin = cl[kc] ? cl[kc].cajas : 0
+
+      // Áreas de donde SALIERON cajas de este lote
+      const areasSalida = new Set()
+      // Áreas donde QUEDA stock de este lote al cierre
+      const areasRestantes = new Set()
+      const todasAreas = new Set([...l.areas, ...(cl[kc]?.areas ?? [])])
+      for (const a of todasAreas) {
+        const ka = `${l.sku}||${l.fv}||${a}`
+        const ini = pa[ka] ?? 0
+        const fin = ca[ka] ?? 0
+        if (ini - fin > 0) areasSalida.add(a)
+        if (fin > 5) areasRestantes.add(a)
+      }
+
+      return {
+        ...l,
+        cajasIni: l.cajas,
+        cajasFin,
+        despachado: Math.max(0, l.cajas - cajasFin),
+        areasSalida,
+        areasRestantes,
+      }
     })
 
     const totalDespachadoSku = info.reduce((s, d) => s + d.despachado, 0)
     cajasTodo += totalDespachadoSku
 
-    if (lotes.length < 2) continue
-    if (totalDespachadoSku <= 5) continue
-
+    if (lotes.length < 2 || totalDespachadoSku <= 5) continue
     cajasDespachadas += totalDespachadoSku
 
     for (let j = 0; j < info.length; j++) {
@@ -276,16 +294,19 @@ export function calcCumplimientoCajas(prevRows, currRows) {
         const antiguoConStock = ant.cajasFin > 5 || (ant.cajasIni > 5 && ant.despachado < ant.cajasIni)
         if (!antiguoConStock) continue
 
-        // Mismo tramo de vencimiento → no es incumplimiento (redondeo del WMS)
         if (nv.dias - ant.dias <= TOLERANCIA_DIAS) { nEmpates++; continue }
 
-        const antSoloPicking  = [...ant.areas].every(x => esPicking(x))
-        const antTieneAlmacen = [...ant.areas].some(x => esAlmacenamiento(x))
-        const nvTieneAlmacen  = [...nv.areas].some(x => esAlmacenamiento(x))
-        const nvSoloPicking   = [...nv.areas].every(x => esPicking(x))
+        // Dónde quedó el stock del antiguo, y de dónde salieron las cajas del nuevo
+        const antAreas = ant.areasRestantes.size > 0 ? ant.areasRestantes : ant.areas
+        const nvAreas  = nv.areasSalida.size   > 0 ? nv.areasSalida   : nv.areas
+
+        const antSoloPicking  = [...antAreas].every(x => esPicking(x))
+        const antTieneAlmacen = [...antAreas].some(x => esAlmacenamiento(x))
+        const nvTieneAlmacen  = [...nvAreas].some(x => esAlmacenamiento(x))
+        const nvSoloPicking   = [...nvAreas].every(x => esPicking(x))
 
         if (antSoloPicking && nvTieneAlmacen) {
-          // Pallet completo → cumplimiento
+          nPalletCompleto++          // pallet completo → cumplimiento
         } else if (antTieneAlmacen && !nvTieneAlmacen && nvSoloPicking) {
           nAbastecimiento++
         } else {
@@ -305,7 +326,7 @@ export function calcCumplimientoCajas(prevRows, currRows) {
   return {
     pctCajas, cajasOK, cajasDespachadas, cajasIncumplidas,
     pctCajasTodo, cajasOKTodo, cajasTodo,
-    nIncumple, nAbastecimiento, nEmpates,
+    nIncumple, nAbastecimiento, nEmpates, nPalletCompleto,
   }
 }
 
