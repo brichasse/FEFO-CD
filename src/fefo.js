@@ -1,4 +1,5 @@
 export const STORAGE_KEY = 'fefo_snapshots_v5'
+export const TOLERANCIA_DIAS = 0
 
 const PATRONES_EXCLUIR        = ['STAGE DESPACHO', 'STAGE RECEPCION', 'RETENCION']
 const PATRONES_ALMACENAMIENTO = ['ALMACENAMIENTO', 'VNA', 'CARPA', 'MIXTOS']
@@ -152,6 +153,7 @@ export function calcDiff(prev, curr) {
     }
 
     const ant = lotes1[0], nvo = lotes1[1]
+    if (nvo.dias - ant.dias <= TOLERANCIA_DIAS) continue  // mismo tramo, no aplica FEFO
     const a2 = cm2[ant.fv], n2 = cm2[nvo.fv]
     const ca2 = a2 ? a2.cajas : ant.cajas
     const cn2 = n2 ? n2.cajas : nvo.cajas
@@ -241,45 +243,43 @@ export function calcCumplimientoCajas(prevRows, currRows) {
     porSku[sku].push(pm[k])
   }
 
-  let cajasDespachadas = 0
+  let cajasDespachadas = 0   // solo SKU multi-lote (FEFO aplicable)
+  let cajasTodo = 0          // todo lo despachado, incluidos SKU de un solo lote
   let cajasIncumplidas = 0
   let nIncumple = 0
   let nAbastecimiento = 0
+  let nEmpates = 0           // casos perdonados por días iguales
 
   const { esAlmacenamiento, esPicking } = clasificadoresArea()
 
   for (const sku of Object.keys(porSku)) {
     const lotes = porSku[sku].sort((a, b) => a.dias - b.dias)
-    if (lotes.length < 2) continue
 
-    // Estado de cada lote: cajas al inicio, al final, y despachado
     const info = lotes.map(l => {
       const kc = `${l.sku}||${l.fv}`
       const cajasFin = cm[kc] ? cm[kc].cajas : 0
-      return {
-        ...l,
-        cajasIni: l.cajas,
-        cajasFin,
-        despachado: Math.max(0, l.cajas - cajasFin),
-      }
+      return { ...l, cajasIni: l.cajas, cajasFin, despachado: Math.max(0, l.cajas - cajasFin) }
     })
 
     const totalDespachadoSku = info.reduce((s, d) => s + d.despachado, 0)
+    cajasTodo += totalDespachadoSku
+
+    if (lotes.length < 2) continue
     if (totalDespachadoSku <= 5) continue
 
     cajasDespachadas += totalDespachadoSku
 
-    // Recorrer cada lote como "nuevo" y ver si había un lote más antiguo con stock disponible
     for (let j = 0; j < info.length; j++) {
       const nv = info[j]
       if (nv.despachado <= 5) continue
 
-      // ¿Hay algún lote más antiguo (índice menor) que todavía tenía stock disponible durante el período?
       for (let a = 0; a < j; a++) {
         const ant = info[a]
-        // El antiguo tenía stock disponible si no se agotó (le quedaban cajas al final o al inicio tenía y no salió todo)
         const antiguoConStock = ant.cajasFin > 5 || (ant.cajasIni > 5 && ant.despachado < ant.cajasIni)
         if (!antiguoConStock) continue
+
+        // Mismo tramo de vencimiento → no es incumplimiento (redondeo del WMS)
+        if (nv.dias - ant.dias <= TOLERANCIA_DIAS) { nEmpates++; continue }
 
         const antSoloPicking  = [...ant.areas].every(x => esPicking(x))
         const antTieneAlmacen = [...ant.areas].some(x => esAlmacenamiento(x))
@@ -287,24 +287,28 @@ export function calcCumplimientoCajas(prevRows, currRows) {
         const nvSoloPicking   = [...nv.areas].every(x => esPicking(x))
 
         if (antSoloPicking && nvTieneAlmacen) {
-          // Pallet completo → cumplimiento, no cuenta
+          // Pallet completo → cumplimiento
         } else if (antTieneAlmacen && !nvTieneAlmacen && nvSoloPicking) {
-          // Abastecimiento → registro aparte
           nAbastecimiento++
         } else {
-          // Incumplimiento real: las cajas del nuevo son incumplidas
           nIncumple++
           cajasIncumplidas += nv.despachado
         }
-        break  // basta un antiguo con stock para marcar incumplimiento; no doble-contar
+        break
       }
     }
   }
 
-  const cajasOK = cajasDespachadas - cajasIncumplidas
-  const pctCajas = cajasDespachadas > 0 ? cajasOK / cajasDespachadas * 100 : null
+  const cajasOK      = cajasDespachadas - cajasIncumplidas
+  const cajasOKTodo  = cajasTodo - cajasIncumplidas
+  const pctCajas     = cajasDespachadas > 0 ? cajasOK / cajasDespachadas * 100 : null
+  const pctCajasTodo = cajasTodo > 0 ? cajasOKTodo / cajasTodo * 100 : null
 
-  return { pctCajas, cajasOK, cajasDespachadas, cajasIncumplidas, nIncumple, nAbastecimiento }
+  return {
+    pctCajas, cajasOK, cajasDespachadas, cajasIncumplidas,
+    pctCajasTodo, cajasOKTodo, cajasTodo,
+    nIncumple, nAbastecimiento, nEmpates,
+  }
 }
 
 // Helper: clasificadores de área (mismo criterio que calcDiff)
