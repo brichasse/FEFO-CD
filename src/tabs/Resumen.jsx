@@ -133,6 +133,7 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
                 <tr>
                   <TH width="120px">Centro</TH>
                   <TH width="110px">Cumplimiento</TH>
+                  <TH width="105px">% s/ total</TH>
                   <TH width="90px">vs sem. ant.</TH>
                   <TH width="130px">Cajas OK / desp.</TH>
                   <TH width="90px">Incumple</TH>
@@ -150,6 +151,9 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
                       <TD style={{ fontWeight: 600, color: '#0f172a' }}>{cd}</TD>
                       <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color: colorPct(p), fontSize: 14 }}>
                         {p != null ? `${p.toFixed(1)}%` : '—'}
+                      </TD>
+                      <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, color: colorPct(actual?.pctCajasTodo) }}>
+                        {actual?.pctCajasTodo != null ? `${actual.pctCajasTodo.toFixed(1)}%` : '—'}
                       </TD>
                       <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: delta == null ? '#94a3b8' : delta >= 0 ? '#16a34a' : '#dc2626' }}>
                         {delta == null ? '—' : `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(1)}`}
