@@ -114,7 +114,7 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
                 return (
                   <button key={sem} onClick={() => setSemanaSel(sem)}
                     style={{ background: isSel ? '#0369a1' : '#f1f5f9', color: isSel ? 'white' : '#475569', border: '1px solid ' + (isSel ? '#0369a1' : '#e2e8f0'), borderRadius: 6, padding: '3px 10px', fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: isSel ? 600 : 400, cursor: 'pointer', lineHeight: 1.3 }}>
-                    S{numSemana} · base {base}
+                    Semana {numSemana}
                     {base && (
                       <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>
                         {base.slice(0,5)} → {registro.fechaRep.slice(0,5)}
