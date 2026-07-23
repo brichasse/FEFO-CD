@@ -198,27 +198,25 @@ function parseFecha(f) {
 
 // Semana ISO de una fecha "DD/MM/YYYY" → "2026-W26"
 export function getSemanaISO(fechaStr) {
-  const date = parseFecha(fechaStr)
-  const target = new Date(date.valueOf())
-  const dayNr = (date.getDay() + 6) % 7
-  target.setDate(target.getDate() - dayNr + 3)
-  const firstThursday = target.valueOf()
-  target.setMonth(0, 1)
-  if (target.getDay() !== 4) {
-    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7)
-  }
-  const semana = 1 + Math.ceil((firstThursday - target) / 604800000)
-  return `${date.getFullYear()}-W${String(semana).padStart(2, '0')}`
+  const [d, m, y] = fechaStr.split('/').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  const dayNr = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - dayNr + 3)
+  const jueves = date.valueOf()
+  const anio = date.getUTCFullYear()
+  const ene1 = new Date(Date.UTC(anio, 0, 1))
+  const semana = 1 + Math.round(((jueves - ene1) / 86400000 - 3 + ((ene1.getUTCDay() + 6) % 7)) / 7)
+  return `${anio}-W${String(semana).padStart(2, '0')}`
 }
 
 // Lunes de la semana de una fecha → "DD/MM/YYYY"
 export function lunesDeLaSemana(fechaStr) {
-  const date = parseFecha(fechaStr)
-  const dayNr = (date.getDay() + 6) % 7
-  date.setDate(date.getDate() - dayNr)
-  return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`
+  const [d, m, y] = fechaStr.split('/').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  const dayNr = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - dayNr)
+  return `${String(date.getUTCDate()).padStart(2,'0')}/${String(date.getUTCMonth()+1).padStart(2,'0')}/${date.getUTCFullYear()}`
 }
-
 // Cumplimiento FEFO por cajas entre dos snapshots (lunes vs lunes)
 // Devuelve cajas despachadas OK, total despachado, y conteos de eventos
 export function calcCumplimientoCajas(prevRows, currRows) {
