@@ -112,10 +112,9 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
                 const isSel = sem === semanaActiva
                 const registro = Object.values(cumplimientoPorCd).flat().find(x => x.semana === sem)
                 const base = registro?.fechaRepPrev
-                const numSemana = base ? parseInt(getSemanaISO(base).split('-W')[1]) : parseInt(sem.split('-W')[1]) - 1
+                const numSemana = base ? semanaDe(base) : parseInt(sem.split('-W')[1]) - 1
                 return (
                   <button key={sem} onClick={() => setSemanaSel(sem)}
-                    title={base ? `${base} → ${registro.fechaRep}` : ''}
                     style={{ background: isSel ? '#0369a1' : '#f1f5f9', color: isSel ? 'white' : '#475569', border: '1px solid ' + (isSel ? '#0369a1' : '#e2e8f0'), borderRadius: 6, padding: '3px 10px', fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: isSel ? 600 : 400, cursor: 'pointer', lineHeight: 1.3 }}>
                     Semana {numSemana}
                     {base && (
