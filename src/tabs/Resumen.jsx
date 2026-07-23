@@ -74,12 +74,15 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
     if (c.actual) {
       acc.ok += c.actual.cajasOK
       acc.desp += c.actual.cajasDespachadas
+      acc.okTodo += c.actual.cajasOKTodo
+      acc.todo += c.actual.cajasTodo
       acc.nIncumple += c.actual.nIncumple
       acc.nAbast += c.actual.nAbastecimiento
     }
     return acc
-  }, { ok: 0, desp: 0, nIncumple: 0, nAbast: 0 })
-  const pctTotal = totCumpl.desp > 0 ? totCumpl.ok / totCumpl.desp * 100 : null
+  }, { ok: 0, desp: 0, okTodo: 0, todo: 0, nIncumple: 0, nAbast: 0 })
+  const pctTotal     = totCumpl.desp > 0 ? totCumpl.ok / totCumpl.desp * 100 : null
+  const pctTotalTodo = totCumpl.todo > 0 ? totCumpl.okTodo / totCumpl.todo * 100 : null
 
   const colorPct = (p) => p == null ? '#94a3b8' : p >= 98 ? '#16a34a' : p >= 95 ? '#d97706' : '#dc2626'
 
@@ -113,11 +116,11 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
           {/* KPI titular */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '14px 16px' }}>
-              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>Cumplimiento total</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: colorPct(pctTotal), fontFamily: "'DM Mono', monospace" }}>
-                {pctTotal != null ? `${pctTotal.toFixed(1)}%` : '—'}
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>Sobre total despachado</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: colorPct(pctTotalTodo), fontFamily: "'DM Mono', monospace" }}>
+                {pctTotalTodo != null ? `${pctTotalTodo.toFixed(1)}%` : '—'}
               </div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{totCumpl.ok.toLocaleString()} / {totCumpl.desp.toLocaleString()} cajas OK</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>incluye SKU de un solo lote</div>
             </div>
             <StatCard label="Incumplimientos" value={totCumpl.nIncumple} color={totCumpl.nIncumple > 0 ? '#dc2626' : '#16a34a'} sub="eventos SKU" />
             <StatCard label="Abastecimiento" value={totCumpl.nAbast} color="#d97706" sub="registro aparte" />
