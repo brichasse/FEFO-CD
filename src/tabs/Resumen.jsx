@@ -2,6 +2,18 @@ import { useState, useMemo } from 'react'
 import { pctVida, classifyPct, calcDiff, calcCumplimientoSemanal, getSemanaISO } from '../fefo.js'
 import { TH, TD, EmptyState, StatCard } from '../components.jsx'
 
+function semanaDe(fechaStr) {
+  const [d, m, y] = fechaStr.split('/').map(Number)
+  const date = new Date(y, m - 1, d)
+  const target = new Date(date.valueOf())
+  const dayNr = (date.getDay() + 6) % 7
+  target.setDate(target.getDate() - dayNr + 3)
+  const firstThursday = target.valueOf()
+  target.setMonth(0, 1)
+  if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7)
+  return 1 + Math.ceil((firstThursday - target) / 604800000)
+}
+
 export default function Resumen({ allData, filtraEstado, onSelectCd }) {
   const cds = Object.keys(allData)
   const [semanaSel, setSemanaSel] = useState(null) // null = última semana
