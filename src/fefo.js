@@ -140,6 +140,22 @@ export function calcDiff(prev, curr) {
 
   const ok = [], riesgo = [], incumple = [], abastecimiento = []
 
+  // Áreas donde queda stock de un lote, y áreas de donde salieron cajas
+  const infoAreas = (sku, fv, areasPrev) => {
+    const todas = new Set(areasPrev)
+    for (const k of Object.keys(cm)) {
+      const [s, f, a] = k.split('||')
+      if (s === sku && f === fv) todas.add(a)
+    }
+    const restantes = new Set(), salida = new Set()
+    for (const a of todas) {
+      const ini = pm[`${sku}||${fv}||${a}`]?.cajas ?? 0
+      const fin = cm[`${sku}||${fv}||${a}`]?.cajas ?? 0
+      if (fin > 5) restantes.add(a)
+      if (ini - fin > 0) salida.add(a)
+    }
+    return { restantes: [...restantes], salida: [...salida] }
+  }
   for (const sku of Object.keys(bsp)) {
     if (!bsc[sku]) continue
     const lotes1 = bsp[sku].sort((a, b) => a.dias - b.dias)
@@ -174,11 +190,20 @@ export function calcDiff(prev, curr) {
         if (antSoloPicking && nvoTieneAlmacen) {
           // OK
         } else if (antTieneAlmacen && nvoTieneAlmacen) {
-          incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
+          incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, vida_ant: ant.vidaUtil,
+            caj_ant: ant.cajas, areas_ant: aa, areas_ant_rem: infoAreas(sku, ant.fv, ant.areas).restantes,
+            dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, areas_nvo_sal: infoAreas(sku, nvo.fv, nvo.areas).salida,
+            pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         } else if (antTieneAlmacen && !nvoTieneAlmacen && nvoTienePicking) {
-          abastecimiento.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
+          abastecimiento.push({ sku, desc: ant.desc, dias_ant: ant.dias, vida_ant: ant.vidaUtil,
+            caj_ant: ant.cajas, areas_ant: aa, areas_ant_rem: infoAreas(sku, ant.fv, ant.areas).restantes,
+            dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, areas_nvo_sal: infoAreas(sku, nvo.fv, nvo.areas).salida,
+            pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         } else if (antSoloPicking && nvoTienePicking) {
-          incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, areas_ant: aa, dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
+          incumple.push({ sku, desc: ant.desc, dias_ant: ant.dias, vida_ant: ant.vidaUtil,
+            caj_ant: ant.cajas, areas_ant: aa, areas_ant_rem: infoAreas(sku, ant.fv, ant.areas).restantes,
+            dias_nvo: nvo.dias, delta_nvo: dn, areas_nvo: na, areas_nvo_sal: infoAreas(sku, nvo.fv, nvo.areas).salida,
+            pct: Math.round(Math.abs(dn) / nvo.cajas * 100) })
         }
       } else if (ant.dias < 90) {
         riesgo.push({ sku, desc: ant.desc, dias_ant: ant.dias, caj_ant: ant.cajas, nota: 'Crítico sin movimiento', areas: aa })
