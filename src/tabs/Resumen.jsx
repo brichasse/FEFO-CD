@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
-import { pctVida, classifyPct, calcDiff, calcCumplimientoSemanal, getSemanaISO } from '../fefo.js'
-import { TH, TD, EmptyState, StatCard } from '../components.jsx'
 import { pctVida, classifyPct, calcDiff, calcCumplimientoSemanal, getSemanaISO, cumplimientoFrescura } from '../fefo.js'
+import { TH, TD, EmptyState, StatCard } from '../components.jsx'
 
 function semanaDe(fechaStr) {
   const [d, m, y] = fechaStr.split('/').map(Number)
