@@ -38,8 +38,8 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
   const riskRows = [
     ['Urgente', '#dc2626', '<30% vida'],
     ['Crítico', '#ef4444', '30–50% vida'],
-    ['Alerta',  '#d97706', '50–55% vida'],
-    ['Sano',    '#16a34a', '>55% vida'],
+    ['Alerta',  '#d97706', '50–66% vida'],
+    ['Sano',    '#16a34a', '>66% vida'],
   ]
 
   return (
