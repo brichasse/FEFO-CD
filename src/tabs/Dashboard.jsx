@@ -4,7 +4,7 @@ import { StatCard, AlertBar } from '../components.jsx'
 export default function Dashboard({ snapshots, latest, prev, diff, incumples, cdName }) {
   const agg = latest ? latest.rows : []
   const tot = agg.reduce((s, r) => s + r.cajas, 0)
-
+  const fresc = cumplimientoFrescura(agg)
   const niveles = ['Urgente', 'Crítico', 'Alerta', 'Sano', 'Sin control', 'Sin dato']
   const rg = Object.fromEntries(niveles.map(n => [n, 0]))
   const rc = Object.fromEntries(niveles.map(n => [n, 0]))
@@ -13,11 +13,9 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
     rg[c.label] = (rg[c.label] ?? 0) + 1
     rc[c.label] = (rc[c.label] ?? 0) + r.cajas
   }
-
   const criticos = [...agg]
     .filter(r => {
       const c = classifyPct(pctVida(r), r.vidaUtil)
-      const fresc = cumplimientoFrescura(agg)
       return c.nivel >= 3
     })
     .sort((a, b) => (pctVida(a) ?? 999) - (pctVida(b) ?? 999))
