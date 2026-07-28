@@ -29,7 +29,7 @@ export function classifyPct(pct, vidaUtil) {
   if (pct == null)  return { label: 'Sin dato', nivel: 0, color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }
   if (pct < 30)     return { label: 'Urgente',  nivel: 4, color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
   if (pct < 50)     return { label: 'Crítico',  nivel: 3, color: '#ef4444', bg: '#fef2f2', border: '#fecaca' }
-  if (pct <= 55)    return { label: 'Alerta',   nivel: 2, color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
+  if (pct <= 66)    return { label: 'Alerta',   nivel: 2, color: '#d97706', bg: '#fffbeb', border: '#fcd34d' }
   return              { label: 'Sano',     nivel: 1, color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
 }
 
