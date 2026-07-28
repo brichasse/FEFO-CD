@@ -16,11 +16,53 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
   const cds = Object.keys(allData)
   const [semanaSel, setSemanaSel] = useState(null) // null = última semana
 
-  if (cds.length === 0) return <EmptyState icon="🏢" text="Sube una base para ver el resumen de centros." />
-
   const filtrar = filtraEstado || ((rows) => rows)
 
-// ── Criticidad de frescura por centro ──
+  // ── Cumplimiento FEFO semanal por centro ──
+  const cumplimientoPorCd = useMemo(() => {
+    const res = {}
+    for (const cd of cds) {
+      const snaps = (allData[cd] || []).map(s => ({ ...s, rows: filtrar(s.rows) }))
+      res[cd] = calcCumplimientoSemanal(snaps)
+    }
+    return res
+  }, [allData, filtraEstado])
+
+  const semanasDisponibles = useMemo(() => {
+    const set = new Set()
+    for (const cd of cds) for (const s of (cumplimientoPorCd[cd] || [])) set.add(s.semana)
+    return [...set].sort()
+  }, [cumplimientoPorCd])
+
+  if (cds.length === 0) return <EmptyState icon="🏢" text="Sube una base para ver el resumen de centros." />
+
+  const semanaActiva = semanaSel || semanasDisponibles[semanasDisponibles.length - 1]
+
+  const cumplimientoSemana = cds.map(cd => {
+    const serie = cumplimientoPorCd[cd] || []
+    const idx = serie.findIndex(s => s.semana === semanaActiva)
+    const actual = idx >= 0 ? serie[idx] : null
+    const anterior = idx > 0 ? serie[idx - 1] : null
+    return { cd, actual, anterior }
+  })
+
+  const totCumpl = cumplimientoSemana.reduce((acc, c) => {
+    if (c.actual) {
+      acc.ok += c.actual.cajasOK
+      acc.desp += c.actual.cajasDespachadas
+      acc.okTodo += c.actual.cajasOKTodo
+      acc.todo += c.actual.cajasTodo
+      acc.nIncumple += c.actual.nIncumple
+      acc.nAbast += c.actual.nAbastecimiento
+    }
+    return acc
+  }, { ok: 0, desp: 0, okTodo: 0, todo: 0, nIncumple: 0, nAbast: 0 })
+  const pctTotal     = totCumpl.desp > 0 ? totCumpl.ok / totCumpl.desp * 100 : null
+  const pctTotalTodo = totCumpl.todo > 0 ? totCumpl.okTodo / totCumpl.todo * 100 : null
+
+  const colorPct = (p) => p == null ? '#94a3b8' : p >= 98 ? '#16a34a' : p >= 95 ? '#d97706' : '#dc2626'
+
+  // ── Criticidad de frescura por centro ──
   const filasFrescura = cds.map(cd => {
     const snaps = allData[cd] || []
     const latest = snaps[snaps.length - 1]
@@ -36,6 +78,9 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
     return acc
   }, { total: 0, cumple: 0, porNivel: {} })
   const pctFrescuraTotal = totF.total > 0 ? totF.cumple / totF.total * 100 : null
+
+  return (
+    <div>
       {/* ── CUMPLIMIENTO FEFO SEMANAL ── */}
       {semanasDisponibles.length > 0 && (
         <div style={{ marginBottom: 28 }}>
@@ -66,6 +111,13 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
 
           {/* KPI titular */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '14px 16px' }}>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>Cumplimiento FEFO</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: colorPct(pctTotal), fontFamily: "'DM Mono', monospace" }}>
+                {pctTotal != null ? `${pctTotal.toFixed(1)}%` : '—'}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>solo SKU multi-lote</div>
+            </div>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '14px 16px' }}>
               <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>Sobre total despachado</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: colorPct(pctTotalTodo), fontFamily: "'DM Mono', monospace" }}>
@@ -128,12 +180,12 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
             </table>
           </div>
           <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>
-            Comparación semanal punta a punta (lunes vs lunes). Movimientos intra-semana no se reflejan. El cumplimiento pondera por cajas despachadas de SKUs con FEFO aplicable.
+            Comparación semanal punta a punta (lunes vs lunes). Movimientos intra-semana no se reflejan. La vista diaria aplica un criterio más estricto y detecta casos que a nivel semanal se resuelven correctamente.
           </p>
         </div>
       )}
 
-      {/* CRITICIDAD DE FRESCURA POR CENTRO */}
+      {/* ── CRITICIDAD DE FRESCURA POR CENTRO ── */}
       <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
         Criticidad de frescura por centro
       </div>
