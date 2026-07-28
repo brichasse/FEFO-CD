@@ -33,6 +33,19 @@ export function classifyPct(pct, vidaUtil) {
   return              { label: 'Sano',     nivel: 1, color: '#16a34a', bg: '#f0fdf4', border: '#86efac' }
 }
 
+// Cumplimiento de frescura: cajas dentro del primer tercio de vida consumida (nivel Sano)
+export function cumplimientoFrescura(rows) {
+  const porNivel = { 'Sano': 0, 'Alerta': 0, 'Crítico': 0, 'Urgente': 0, 'Sin control': 0, 'Sin dato': 0 }
+  let total = 0, cumple = 0
+  for (const r of rows) {
+    const c = classifyPct(pctVida(r), r.vidaUtil)
+    porNivel[c.label] = (porNivel[c.label] ?? 0) + r.cajas
+    total += r.cajas
+    if (c.nivel === 1) cumple += r.cajas   // Sano y Sin control cuentan como cumplimiento
+  }
+  return { pct: total > 0 ? cumple / total * 100 : null, cumple, total, porNivel }
+}
+
 // Compatibilidad: classify por días
 export function classify(dias) {
   if (dias < 60)  return { label: 'Crítico',     color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' }
