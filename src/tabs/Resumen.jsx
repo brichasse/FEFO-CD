@@ -133,10 +133,12 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
         </div>
       )}
 
-      {/* ── CRITICIDAD DE FRESCURA POR CENTRO ── */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>🍋 Criticidad de frescura por centro</div>
+      {/* CRITICIDAD DE FRESCURA POR CENTRO */}
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+        Criticidad de frescura por centro
+      </div>
       <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
-        Cumplimiento = cajas sobre 66% de vida útil restante (dentro del primer tercio consumido)
+        Cumplimiento = cajas sobre 66% de vida util restante (dentro del primer tercio consumido)
       </p>
 
       {/* KPIs globales */}
