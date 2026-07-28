@@ -1,4 +1,4 @@
-import { pctVida, classifyPct } from '../fefo.js'
+import { pctVida, classifyPct, cumplimientoFrescura } from '../fefo.js'
 import { StatCard, AlertBar } from '../components.jsx'
 
 export default function Dashboard({ snapshots, latest, prev, diff, incumples, cdName }) {
@@ -17,6 +17,7 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
   const criticos = [...agg]
     .filter(r => {
       const c = classifyPct(pctVida(r), r.vidaUtil)
+      const fresc = cumplimientoFrescura(agg)
       return c.nivel >= 3
     })
     .sort((a, b) => (pctVida(a) ?? 999) - (pctVida(b) ?? 999))
@@ -47,6 +48,7 @@ export default function Dashboard({ snapshots, latest, prev, diff, incumples, cd
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
         <StatCard label="Total cajas"  value={tot.toLocaleString('es-CL')} />
         <StatCard label="SKUs activos" value={new Set(agg.map(r => r.sku)).size} />
+        <StatCard label="Criticidad de frescura" value={fresc.pct != null ? `${fresc.pct.toFixed(1)}%` : '—'} color="#16a34a" sub="sobre 66% vida útil" />
         <StatCard label="Urgentes <30%" value={rg['Urgente']} color="#dc2626" sub={`${rc['Urgente'].toLocaleString()} cajas`} />
         <StatCard label="Críticos <50%" value={rg['Crítico']} color="#ef4444" sub={`${rc['Crítico'].toLocaleString()} cajas`} />
         {netaDelta !== null && (
