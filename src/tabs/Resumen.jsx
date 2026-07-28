@@ -133,59 +133,85 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
         </div>
       )}
 
-      {/* ── TABLA DE INVENTARIO POR CENTRO ── */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>🏢 Inventario por centro</div>
-      <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-        Datos del último snapshot de cada centro
+      {/* ── CRITICIDAD DE FRESCURA POR CENTRO ── */}
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>🍋 Criticidad de frescura por centro</div>
+      <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+        Cumplimiento = cajas sobre 66% de vida útil restante (dentro del primer tercio consumido)
       </p>
+
+      {/* KPIs globales */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '14px 16px' }}>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>Cumplimiento global</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: colorPct(pctFrescuraTotal), fontFamily: "'DM Mono', monospace" }}>
+            {pctFrescuraTotal != null ? `${pctFrescuraTotal.toFixed(1)}%` : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{totF.total.toLocaleString()} cajas</div>
+        </div>
+        <StatCard label="Sano >66%"      value={(totF.porNivel['Sano'] ?? 0).toLocaleString()}    color="#16a34a" />
+        <StatCard label="Alerta 50–66%"  value={(totF.porNivel['Alerta'] ?? 0).toLocaleString()}  color="#d97706" />
+        <StatCard label="Crítico 30–50%" value={(totF.porNivel['Crítico'] ?? 0).toLocaleString()} color="#ef4444" />
+        <StatCard label="Urgente <30%"   value={(totF.porNivel['Urgente'] ?? 0).toLocaleString()} color="#dc2626" />
+      </div>
+
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <TH width="120px">Centro</TH>
-              <TH width="85px">Fecha</TH>
-              <TH width="90px">Total cajas</TH>
-              <TH width="60px">SKUs</TH>
-              <TH width="120px">Urgentes &lt;30%</TH>
-              <TH width="120px">Críticos &lt;50%</TH>
-              <TH width="75px">Alertas</TH>
-              <TH width="90px">FEFO ❌</TH>
+              <TH width="110px">Centro</TH>
+              <TH width="80px">Fecha</TH>
+              <TH width="110px">Cumplimiento</TH>
+              <TH width="95px">Total cajas</TH>
+              <TH width="105px">Sano &gt;66%</TH>
+              <TH width="105px">Alerta 50–66%</TH>
+              <TH width="105px">Crítico 30–50%</TH>
+              <TH width="105px">Urgente &lt;30%</TH>
             </tr>
           </thead>
           <tbody>
-            {filas.map((f, i) => (
-              <tr key={f.cd}
-                onClick={() => onSelectCd(f.cd)}
-                style={{ background: i % 2 === 0 ? 'white' : '#fafafa', cursor: 'pointer' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f0f9ff'}
-                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafafa'}>
-                <TD style={{ fontWeight: 600, color: '#0f172a' }}>{f.cd}</TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#64748b' }}>{f.fecha ?? '—'}</TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace" }}>{f.totCajas.toLocaleString()}</TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace" }}>{f.skus}</TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace", color: f.urgentes > 0 ? '#dc2626' : '#94a3b8', fontWeight: f.urgentes > 0 ? 700 : 400 }}>
-                  {f.urgentes} <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>· {f.cjUrgente.toLocaleString()} cj</span>
-                </TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace", color: f.criticos > 0 ? '#ef4444' : '#94a3b8', fontWeight: f.criticos > 0 ? 700 : 400 }}>
-                  {f.criticos} <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>· {f.cjCritico.toLocaleString()} cj</span>
-                </TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace", color: f.alertas > 0 ? '#d97706' : '#94a3b8' }}>{f.alertas}</TD>
-                <TD style={{ fontFamily: "'DM Mono', monospace", color: f.incumple > 0 ? '#dc2626' : '#16a34a', fontWeight: f.incumple > 0 ? 700 : 400 }}>
-                  {f.incumple ?? '—'}
-                </TD>
-              </tr>
-            ))}
+            {filasFrescura.map((f, i) => {
+              const cel = (n, color) => {
+                const v = f.porNivel[n] ?? 0
+                return (
+                  <TD style={{ fontFamily: "'DM Mono', monospace", color: v > 0 ? color : '#cbd5e1' }}>
+                    <div style={{ fontWeight: v > 0 ? 600 : 400 }}>{v.toLocaleString()}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>{f.total > 0 ? `${(v / f.total * 100).toFixed(1)}%` : '—'}</div>
+                  </TD>
+                )
+              }
+              return (
+                <tr key={f.cd}
+                  onClick={() => onSelectCd(f.cd)}
+                  style={{ background: i % 2 === 0 ? 'white' : '#fafafa', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f0f9ff'}
+                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafafa'}>
+                  <TD style={{ fontWeight: 600, color: '#0f172a' }}>{f.cd}</TD>
+                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#64748b' }}>{f.fecha ?? '—'}</TD>
+                  <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 15, color: colorPct(f.pct) }}>
+                    {f.pct != null ? `${f.pct.toFixed(1)}%` : '—'}
+                  </TD>
+                  <TD style={{ fontFamily: "'DM Mono', monospace" }}>{f.total.toLocaleString()}</TD>
+                  {cel('Sano', '#16a34a')}
+                  {cel('Alerta', '#d97706')}
+                  {cel('Crítico', '#ef4444')}
+                  {cel('Urgente', '#dc2626')}
+                </tr>
+              )
+            })}
           </tbody>
           <tfoot>
             <tr style={{ borderTop: '2px solid #e2e8f0', background: '#f8fafc' }}>
               <TD style={{ fontWeight: 700 }}>TOTAL</TD>
               <TD></TD>
-              <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{totalGeneral.cajas.toLocaleString()}</TD>
-              <TD></TD>
-              <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color: totalGeneral.urgentes > 0 ? '#dc2626' : '#94a3b8' }}>{totalGeneral.urgentes}</TD>
-              <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color: totalGeneral.criticos > 0 ? '#ef4444' : '#94a3b8' }}>{totalGeneral.criticos}</TD>
-              <TD></TD>
-              <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color: totalGeneral.incumple > 0 ? '#dc2626' : '#16a34a' }}>{totalGeneral.incumple}</TD>
+              <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 15, color: colorPct(pctFrescuraTotal) }}>
+                {pctFrescuraTotal != null ? `${pctFrescuraTotal.toFixed(1)}%` : '—'}
+              </TD>
+              <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{totF.total.toLocaleString()}</TD>
+              {['Sano','Alerta','Crítico','Urgente'].map(n => (
+                <TD key={n} style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+                  {(totF.porNivel[n] ?? 0).toLocaleString()}
+                </TD>
+              ))}
             </tr>
           </tfoot>
         </table>
