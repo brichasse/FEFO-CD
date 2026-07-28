@@ -20,84 +20,22 @@ export default function Resumen({ allData, filtraEstado, onSelectCd }) {
 
   const filtrar = filtraEstado || ((rows) => rows)
 
-  // ── Tabla de inventario por centro (último snapshot) ──
-  const filas = cds.map(cd => {
+// ── Criticidad de frescura por centro ──
+  const filasFrescura = cds.map(cd => {
     const snaps = allData[cd] || []
     const latest = snaps[snaps.length - 1]
-    const prev = snaps[snaps.length - 2]
     const rows = latest ? filtrar(latest.rows) : []
+    const f = cumplimientoFrescura(rows)
+    return { cd, fecha: latest?.date, ...f }
+  }).sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))
 
-    const totCajas = rows.reduce((s, r) => s + r.cajas, 0)
-    const skus = new Set(rows.map(r => r.sku)).size
-
-    let urgentes = 0, criticos = 0, alertas = 0, cjUrgente = 0, cjCritico = 0
-    for (const r of rows) {
-      const c = classifyPct(pctVida(r), r.vidaUtil)
-      if (c.nivel === 4) { urgentes++; cjUrgente += r.cajas }
-      else if (c.nivel === 3) { criticos++; cjCritico += r.cajas }
-      else if (c.nivel === 2) { alertas++ }
-    }
-
-    const diff = prev && latest ? calcDiff(filtrar(prev.rows), filtrar(latest.rows)) : null
-    const incumple = diff ? diff.incumple.length : null
-
-    return { cd, fecha: latest?.date, totCajas, skus, urgentes, criticos, alertas, cjUrgente, cjCritico, incumple }
-  }).sort((a, b) => (b.urgentes + b.criticos) - (a.urgentes + a.criticos))
-
-  const totalGeneral = filas.reduce((acc, f) => ({
-    cajas: acc.cajas + f.totCajas,
-    urgentes: acc.urgentes + f.urgentes,
-    criticos: acc.criticos + f.criticos,
-    incumple: acc.incumple + (f.incumple ?? 0),
-  }), { cajas: 0, urgentes: 0, criticos: 0, incumple: 0 })
-
-  // ── Cumplimiento FEFO semanal por centro ──
-  const cumplimientoPorCd = useMemo(() => {
-    const res = {}
-    for (const cd of cds) {
-      const snaps = (allData[cd] || []).map(s => ({ ...s, rows: filtrar(s.rows) }))
-      res[cd] = calcCumplimientoSemanal(snaps)
-    }
-    return res
-  }, [allData, filtraEstado])
-
-  // Todas las semanas disponibles (unión de todos los centros)
-  const semanasDisponibles = useMemo(() => {
-    const set = new Set()
-    for (const cd of cds) for (const s of (cumplimientoPorCd[cd] || [])) set.add(s.semana)
-    return [...set].sort()
-  }, [cumplimientoPorCd])
-
-  const semanaActiva = semanaSel || semanasDisponibles[semanasDisponibles.length - 1]
-
-  // Datos de cumplimiento de la semana activa por centro
-  const cumplimientoSemana = cds.map(cd => {
-    const serie = cumplimientoPorCd[cd] || []
-    const idx = serie.findIndex(s => s.semana === semanaActiva)
-    const actual = idx >= 0 ? serie[idx] : null
-    const anterior = idx > 0 ? serie[idx - 1] : null
-    return { cd, actual, anterior }
-  })
-
-  // Totales de cumplimiento (ponderado por cajas) de la semana activa
-  const totCumpl = cumplimientoSemana.reduce((acc, c) => {
-    if (c.actual) {
-      acc.ok += c.actual.cajasOK
-      acc.desp += c.actual.cajasDespachadas
-      acc.okTodo += c.actual.cajasOKTodo
-      acc.todo += c.actual.cajasTodo
-      acc.nIncumple += c.actual.nIncumple
-      acc.nAbast += c.actual.nAbastecimiento
-    }
+  const totF = filasFrescura.reduce((acc, f) => {
+    acc.total += f.total
+    acc.cumple += f.cumple
+    for (const k of Object.keys(f.porNivel)) acc.porNivel[k] = (acc.porNivel[k] ?? 0) + f.porNivel[k]
     return acc
-  }, { ok: 0, desp: 0, okTodo: 0, todo: 0, nIncumple: 0, nAbast: 0 })
-  const pctTotal     = totCumpl.desp > 0 ? totCumpl.ok / totCumpl.desp * 100 : null
-  const pctTotalTodo = totCumpl.todo > 0 ? totCumpl.okTodo / totCumpl.todo * 100 : null
-
-  const colorPct = (p) => p == null ? '#94a3b8' : p >= 98 ? '#16a34a' : p >= 95 ? '#d97706' : '#dc2626'
-
-  return (
-    <div>
+  }, { total: 0, cumple: 0, porNivel: {} })
+  const pctFrescuraTotal = totF.total > 0 ? totF.cumple / totF.total * 100 : null
       {/* ── CUMPLIMIENTO FEFO SEMANAL ── */}
       {semanasDisponibles.length > 0 && (
         <div style={{ marginBottom: 28 }}>
