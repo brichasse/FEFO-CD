@@ -163,17 +163,24 @@ export default function App() {
   // Snapshot seleccionado (por defecto el último)
   const snapshotsRaw = activeCd ? (allData[activeCd] || []) : []
 
-  // Todos los estados presentes en el CD (o en todos si estamos en resumen)
+  // Perfiles de antigüedad sin control de vencimiento
+  const PERFILES_SIN_CONTROL = [600, 999, 1100, 9999]
+  const esSinControl = (r) => r.vidaUtil != null && PERFILES_SIN_CONTROL.includes(r.vidaUtil)
+
+  // Categoría de cada fila para el filtro: "Sin control" si aplica, si no su estado real
+  const categoriaEstado = (r) => esSinControl(r) ? 'Sin control' : (r.estado || 'Sin estado')
+
+  // Todas las categorías presentes en el CD (o en todos si estamos en resumen)
   const estadosDisponibles = [...new Set(
     (tab === 'resumen'
-      ? Object.values(allData).flat().flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
-      : snapshotsRaw.flatMap(s => s.rows.map(r => r.estado || 'Sin estado'))
+      ? Object.values(allData).flat().flatMap(s => s.rows.map(categoriaEstado))
+      : snapshotsRaw.flatMap(s => s.rows.map(categoriaEstado))
     )
   )].sort()
 
-  // Filtrar filas por estado activo (null = todos)
+  // Filtrar filas por categoría activa (null = todas)
   const filtraEstado = (rows) =>
-    estadosActivos === null ? rows : rows.filter(r => estadosActivos.includes(r.estado || 'Sin estado'))
+    estadosActivos === null ? rows : rows.filter(r => estadosActivos.includes(categoriaEstado(r)))
 
   const snapshots  = snapshotsRaw.map(s => ({ ...s, rows: filtraEstado(s.rows) }))
   const latestIdx  = selectedDate
