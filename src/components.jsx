@@ -31,13 +31,12 @@ export function AreaPill({ area }) {
 export function StatCard({ label, value, color, sub }) {
   return (
     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '14px 16px', minWidth: 0 }}>
-      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: color || '#0f172a', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: "'DM Mono', monospace" }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 600, color: color || '#0f172a', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{sub}</div>}
     </div>
   )
 }
-
 export function AlertBar({ bgColor, borderColor, title, body }) {
   return (
     <div style={{ background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 8 }}>
