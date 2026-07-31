@@ -1,16 +1,60 @@
 import { useState, useMemo } from 'react'
-import { RiskBadge, AreaPill, StatCard, TH, TD, EmptyState } from '../components.jsx'
+import { pctVida, classifyPct } from '../fefo.js'
+import { VidaBadge, AreaPill, StatCard, TH, TD, EmptyState } from '../components.jsx'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
-export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
+// Convierte "DD/MM/YYYY" en número comparable YYYYMMDD
+const ord = (fecha) => fecha ? fecha.split('/').reverse().join('') : '0'
+
+export default function Ingresos({ snapshots = [] }) {
   const [skuFiltro,       setSkuFiltro]       = useState('')
   const [skuSeleccionado, setSkuSeleccionado] = useState(null)
+  const [desde, setDesde] = useState(null)  // null = primer snapshot
+  const [hasta, setHasta] = useState(null)  // null = último snapshot
 
-  if (!diff) return <EmptyState icon="📊" text="Se necesitan al menos 2 snapshots." />
+  if (snapshots.length < 2) return <EmptyState icon="📊" text="Se necesitan al menos 2 snapshots para ver ingresos." />
 
-  const criticos   = diff.nuevos.filter(r => r.dias < 60)
-  const altoRiesgo = diff.nuevos.filter(r => r.dias >= 60 && r.dias < 90)
-  const mostrar    = diff.nuevos.filter(r => r.dias < 90).sort((a, b) => a.dias - b.dias)
+  // Fechas disponibles ordenadas cronológicamente
+  const fechasDisp = snapshots.map(s => s.date)
+  const desdeReal = desde ?? fechasDisp[0]
+  const hastaReal = hasta ?? fechasDisp[fechasDisp.length - 1]
+
+  // Snapshots dentro del rango (para el gráfico y para detectar ingresos)
+  const enRango = (fecha) => ord(fecha) >= ord(desdeReal) && ord(fecha) <= ord(hastaReal)
+
+  // ── Detectar todos los ingresos dentro del rango ──
+  // Un ingreso = lote (sku+fv) que aparece por primera vez respecto al snapshot anterior
+  const ingresos = useMemo(() => {
+    const res = []
+    for (let i = 1; i < snapshots.length; i++) {
+      const curr = snapshots[i]
+      if (!enRango(curr.date)) continue
+      const prevSnap = snapshots[i - 1]
+      const prevKeys = new Set(prevSnap.rows.map(r => `${r.sku}||${r.fv}`))
+      // Agrupar los nuevos por sku+fv para no duplicar por área
+      const nuevosMap = {}
+      for (const r of curr.rows) {
+        const k = `${r.sku}||${r.fv}`
+        if (prevKeys.has(k)) continue
+        if (!nuevosMap[k]) nuevosMap[k] = { ...r, cajas: 0, areas: new Set() }
+        nuevosMap[k].cajas += r.cajas
+        nuevosMap[k].areas.add(r.area)
+      }
+      for (const v of Object.values(nuevosMap)) {
+        res.push({ ...v, fechaIngreso: curr.date, areas: [...v.areas] })
+      }
+    }
+    // Ordenar por fecha de ingreso (más reciente primero), luego por menor vida útil
+    return res.sort((a, b) => {
+      if (ord(b.fechaIngreso) !== ord(a.fechaIngreso)) return ord(b.fechaIngreso) - ord(a.fechaIngreso) > 0 ? 1 : -1
+      const pa = pctVida(a) ?? 999, pb = pctVida(b) ?? 999
+      return pa - pb
+    })
+  }, [snapshots, desdeReal, hastaReal])
+
+  const totalCajas = ingresos.reduce((s, r) => s + r.cajas, 0)
+  const urgentes = ingresos.filter(r => { const c = classifyPct(pctVida(r), r.vidaUtil); return c.nivel === 4 }).length
+  const criticos = ingresos.filter(r => { const c = classifyPct(pctVida(r), r.vidaUtil); return c.nivel === 3 }).length
 
   // ── Todos los SKUs para el autocomplete ──
   const todosSkus = useMemo(() => {
@@ -28,12 +72,14 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
       ).slice(0, 8)
     : []
 
-  // ── Datos del gráfico ──
+  // ── Datos del gráfico (acotado al rango) ──
+  const snapsRango = snapshots.filter(s => enRango(s.date))
+
   const datosGrafico = useMemo(() => {
     if (skuSeleccionado) {
-      // Modo SKU: una línea por lote (fv), mostrando cajas en el tiempo
+      // Modo SKU: una línea por lote (fv), cajas en el tiempo
       const lotes = {}
-      for (const snap of snapshots) {
+      for (const snap of snapsRango) {
         for (const r of snap.rows) {
           if (r.sku !== skuSeleccionado) continue
           const loteKey = r.fv
@@ -41,7 +87,7 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
           lotes[loteKey][snap.date] = (lotes[loteKey][snap.date] ?? 0) + r.cajas
         }
       }
-      const fechas = snapshots.map(s => s.date)
+      const fechas = snapsRango.map(s => s.date)
       const series = Object.keys(lotes)
       const rows   = fechas.map(fecha => {
         const row = { fecha }
@@ -50,49 +96,71 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
       })
       return { tipo: 'sku', fechas, lotes, series, rows }
     } else {
-      // Modo general: cajas nuevas detectadas por fecha, apiladas por riesgo
+      // Modo general: cajas ingresadas por fecha, apiladas por nivel de vida útil
       const rows = []
       for (let i = 1; i < snapshots.length; i++) {
-        const curr     = snapshots[i]
+        const curr = snapshots[i]
+        if (!enRango(curr.date)) continue
         const prevSnap = snapshots[i - 1]
         const prevKeys = new Set(prevSnap.rows.map(r => `${r.sku}||${r.fv}`))
-        const nuevos   = curr.rows.filter(r => !prevKeys.has(`${r.sku}||${r.fv}`))
-        const criticos = nuevos.filter(r => r.dias < 60).reduce((s, r) => s + r.cajas, 0)
-        const altos    = nuevos.filter(r => r.dias >= 60 && r.dias < 90).reduce((s, r) => s + r.cajas, 0)
-        const otros    = nuevos.filter(r => r.dias >= 90).reduce((s, r) => s + r.cajas, 0)
-        rows.push({ fecha: curr.date, 'Crítico <60d': criticos, 'Alto 60–89d': altos, 'Otros': otros })
+        const nuevos = curr.rows.filter(r => !prevKeys.has(`${r.sku}||${r.fv}`))
+        let urg = 0, cri = 0, ale = 0, san = 0
+        for (const r of nuevos) {
+          const c = classifyPct(pctVida(r), r.vidaUtil)
+          if (c.nivel === 4) urg += r.cajas
+          else if (c.nivel === 3) cri += r.cajas
+          else if (c.nivel === 2) ale += r.cajas
+          else san += r.cajas
+        }
+        rows.push({ fecha: curr.date, 'Urgente <30%': urg, 'Crítico 30–50%': cri, 'Alerta 50–66%': ale, 'Sano >66%': san })
       }
       return { tipo: 'general', rows }
     }
-  }, [snapshots, skuSeleccionado])
+  }, [snapshots, skuSeleccionado, desdeReal, hastaReal])
 
   const COLORES = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#84cc16']
 
   const limpiarFiltro = () => { setSkuSeleccionado(null); setSkuFiltro('') }
 
+  // Dropdown de fecha reutilizable
+  const SelectorFecha = ({ valor, onChange, label }) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b' }}>
+      {label}
+      <select value={valor} onChange={e => onChange(e.target.value)}
+        style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#0f172a', cursor: 'pointer' }}>
+        {fechasDisp.map(f => <option key={f} value={f}>{f}</option>)}
+      </select>
+    </label>
+  )
+
   return (
     <div>
-      <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-        Nuevos lotes detectados · <strong>{prev?.date}</strong> → <strong>{latest?.date}</strong>
-      </p>
+      {/* ── FILTRO DE RANGO ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>Rango de ingresos:</span>
+        <SelectorFecha valor={desdeReal} onChange={setDesde} label="Desde" />
+        <SelectorFecha valor={hastaReal} onChange={setHasta} label="Hasta" />
+        <button onClick={() => { setDesde(null); setHasta(null) }}
+          style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 10px', fontSize: 11, color: '#64748b', cursor: 'pointer' }}>
+          Todo el historial
+        </button>
+      </div>
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 18 }}>
-        <StatCard label="Total nuevos"   value={diff.nuevos.length} />
-        <StatCard label="Críticos <60d"  value={criticos.length}   color="#dc2626" />
-        <StatCard label="Alto 60–89d"    value={altoRiesgo.length} color="#d97706" />
+        <StatCard label="Cajas ingresadas" value={totalCajas.toLocaleString()} sub={`${ingresos.length} lotes`} />
+        <StatCard label="Urgentes <30%"  value={urgentes} color="#dc2626" />
+        <StatCard label="Críticos <50%"  value={criticos} color="#ef4444" />
       </div>
 
       {/* ── GRÁFICO ── */}
-      {snapshots.length >= 2 && (
+      {snapsRango.length >= 1 && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: 20, marginBottom: 20 }}>
-
-          {/* Header del gráfico + buscador */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
               {skuSeleccionado
                 ? `📦 ${skuSeleccionado} — ${todosSkus.find(s => s.sku === skuSeleccionado)?.desc ?? ''}`
-                : '📈 Cajas ingresadas por día'}
+                : '📈 Cajas ingresadas por día · color según vida útil al ingresar'}
             </div>
             <div style={{ position: 'relative' }}>
               <input
@@ -107,7 +175,6 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
                   ✕
                 </button>
               )}
-              {/* Dropdown de sugerencias */}
               {sugerencias.length > 0 && (
                 <div style={{ position: 'absolute', top: '110%', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 20, overflow: 'hidden' }}>
                   {sugerencias.map(s => (
@@ -125,26 +192,25 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
             </div>
           </div>
 
-          {/* Gráfico general — barras apiladas */}
+          {/* Gráfico general — barras apiladas por vida útil */}
           {datosGrafico.tipo === 'general' && (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={datosGrafico.rows} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: '#64748b' }} />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
-                <Tooltip
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  formatter={(v, name) => [v.toLocaleString() + ' cj', name]}
-                />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                  formatter={(v, name) => [v.toLocaleString() + ' cj', name]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Crítico <60d" stackId="a" fill="#dc2626" />
-                <Bar dataKey="Alto 60–89d"  stackId="a" fill="#f59e0b" />
-                <Bar dataKey="Otros"        stackId="a" fill="#94a3b8" radius={[4,4,0,0]} />
+                <Bar dataKey="Urgente <30%"   stackId="a" fill="#dc2626" />
+                <Bar dataKey="Crítico 30–50%" stackId="a" fill="#ef4444" />
+                <Bar dataKey="Alerta 50–66%"  stackId="a" fill="#f59e0b" />
+                <Bar dataKey="Sano >66%"      stackId="a" fill="#16a34a" radius={[4,4,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
 
-          {/* Gráfico SKU — área por lote con fecha de detección */}
+          {/* Gráfico SKU — área por lote */}
           {datosGrafico.tipo === 'sku' && (
             <>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
@@ -161,19 +227,14 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="fecha" tick={{ fontSize: 11, fill: '#64748b' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                    formatter={(v, name) => [v != null ? v.toLocaleString() + ' cj' : '—', `vence ${name}`]}
-                  />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                    formatter={(v, name) => [v != null ? v.toLocaleString() + ' cj' : '—', `vence ${name}`]} />
                   <Legend wrapperStyle={{ fontSize: 11 }} formatter={name => `vence ${name}`} />
                   {datosGrafico.series.map((lote, i) => (
                     <Area key={lote} type="monotone" dataKey={lote}
                       stroke={COLORES[i % COLORES.length]}
                       fill={COLORES[i % COLORES.length] + '22'}
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      connectNulls={false}
-                    />
+                      strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
                   ))}
                 </AreaChart>
               </ResponsiveContainer>
@@ -183,9 +244,12 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
       )}
 
       {/* ── TABLA ── */}
-      {mostrar.length === 0 ? (
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+        Ingresos detectados entre <strong>{desdeReal}</strong> y <strong>{hastaReal}</strong> · {ingresos.length} lotes
+      </div>
+      {ingresos.length === 0 ? (
         <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 20, textAlign: 'center', color: '#16a34a', fontWeight: 500 }}>
-          ✅ Sin nuevos ingresos críticos en este período
+          ✅ Sin ingresos en el rango seleccionado
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -193,32 +257,34 @@ export default function Ingresos({ diff, prev, latest, snapshots = [] }) {
             <thead>
               <tr>
                 <TH width="105px">SKU</TH>
-                <TH width="200px">Descripción</TH>
-                <TH width="90px">Detectado</TH>
-                <TH width="60px">Días</TH>
-                <TH width="75px">Cajas</TH>
-                <TH width="95px">Vence</TH>
-                <TH width="200px">Área</TH>
-                <TH width="95px">Riesgo</TH>
+                <TH width="190px">Descripción</TH>
+                <TH width="95px">Ingresó</TH>
+                <TH width="70px">Cajas</TH>
+                <TH width="90px">Vence</TH>
+                <TH width="60px">% Vida</TH>
+                <TH width="170px">Área</TH>
+                <TH width="115px">Frescura</TH>
               </tr>
             </thead>
             <tbody>
-              {mostrar.map((r, i) => (
-                <tr key={i} style={{ background: r.dias < 30 ? '#fef2f2' : r.dias < 60 ? '#fffbeb' : '#fefce8' }}>
-                  <TD
-                    style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', color: '#0369a1', textDecoration: 'underline' }}
-                    onClick={() => { setSkuSeleccionado(r.sku); setSkuFiltro(r.sku) }}>
-                    {r.sku}
-                  </TD>
-                  <TD>{r.desc}</TD>
-                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#0369a1', fontWeight: 600 }}>{r.fechaDeteccion ?? latest?.date}</TD>
-                  <TD style={{ fontWeight: 700, fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{r.dias}</TD>
-                  <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
-                  <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
-                  <TD><AreaPill area={r.area} /></TD>
-                  <TD><RiskBadge dias={r.dias} /></TD>
-                </tr>
-              ))}
+              {ingresos.map((r, i) => {
+                const pct = pctVida(r)
+                return (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', color: '#0369a1', textDecoration: 'underline' }}
+                      onClick={() => { setSkuSeleccionado(r.sku); setSkuFiltro(r.sku) }}>
+                      {r.sku}
+                    </TD>
+                    <TD>{r.desc}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#0369a1', fontWeight: 600 }}>{r.fechaIngreso}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace" }}>{r.cajas.toLocaleString()}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.fv}</TD>
+                    <TD style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{pct != null ? `${Math.round(pct)}%` : '—'}</TD>
+                    <TD>{r.areas.map(a => <AreaPill key={a} area={a} />)}</TD>
+                    <TD><VidaBadge pct={pct} vidaUtil={r.vidaUtil} /></TD>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
