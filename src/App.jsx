@@ -375,7 +375,7 @@ export default function App() {
             {tab === 'dashboard' && <Dashboard snapshots={snapshots} latest={latest} prev={prev} diff={diff} incumples={incumples ?? []} cdName={activeCd} />}
             {tab === 'criticos'  && <Criticos  latest={latest} />}
             {tab === 'fefo'      && <FEFOTab   diff={diff} prev={prev} latest={latest} />}
-            {tab === 'ingresos'  && <Ingresos  diff={diff} prev={prev} latest={latest} snapshots={snapshots} />}
+            {tab === 'ingresos'  && <Ingresos snapshots={snapshots} />}
             {tab === 'snapshots' && <Snapshots snapshots={snapshots} onDelete={onDelete} />}
           </>
         )}
